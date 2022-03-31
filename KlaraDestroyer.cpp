@@ -561,16 +561,14 @@ struct Pawn : public Piece {
 
         //if (depth <= 0)
           //  return 0;
-        //int_fast8_t totalMoves = 0;
 
         auto availableOptions = evolveIntoReference(row + advanceRow());
 
         bool doNoContinue = false;
 
-        //vector<Piece*> availableOptions = evolveInto(row+advanceRow());
         //float rowAdvantage = 0;
         //if(availableOptions.size()==1)
-        {
+        //{
             //rowAdvantage = (6-abs(row-evolveRow()))/128.0;
             /*
             bool allLineClear = true;
@@ -581,10 +579,9 @@ struct Pawn : public Piece {
 
                 }
             }*/
-        }
+       // }
 
 
-        //Piece* originalPiece = board.pieceAt(column,row);
         board.setPieceAt(column, row, nullptr);
 
         if (board.priceInLocation(column, row + advanceRow(), occupancy()) == 0)//Muzu jit pescem o jedno dopredu
@@ -593,78 +590,15 @@ struct Pawn : public Piece {
             for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
 
                 tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, (*availableOptions)[i], 0, 0);
-
-                //float foundOnly = board.tryPiece(column,row+advanceRow(),availableOptions[i],depth-1,occupancy()*(-1),alpha,beta);
-                //float foundVal = foundOnly+(availableOptions[i]->price(row+advanceRow())-price(row))*occupancy();//+rowAdvantage;
-                //if (foundVal*occupancy()>bestValue*occupancy())
-                  //  bestValue=foundVal;
-
-
-                //if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                  //  totalMoves++;
                 if (canGoTwoFields(row))
                     tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, (*availableOptions)[i], 0, 0);
-                /*
-               if(canGoTwoFields(row)&&board.priceInLocation(column,row+advanceRow()*2, occupancy())==0){
-                   float foundOnly = board.tryPiece(column,row+advanceRow()*2,availableOptions[i],depth-1,occupancy()*(-1),alpha,beta);
-                   float foundVal = foundOnly+(availableOptions[i]->price(row+advanceRow())-price(row))*occupancy();//+rowAdvantage;
-                   if (foundVal*occupancy()>bestValue*occupancy())
-                       bestValue=foundVal;
-                   if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                       totalMoves++;
-               }   */
+
             }
         }
         for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
             tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, (*availableOptions)[i], FLT_MIN);
             tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, (*availableOptions)[i], FLT_MIN);
         }
-
-        /*
-tryChangeAndUpdateIfBetter(board,column+1,row+advanceRow(),depth-1,alpha,beta,bestValue,totalMoves,doNoContinue,(*availableOptions)[i],FLT_MIN);
-if(board.priceInLocation(column+1,row+advanceRow(), occupancy())>0)
-{
-    for (int_fast8_t i = 0; i < availableOptions.size(); ++i) {
-        float valueOfKill = board.priceInLocation(column+1,row+advanceRow(), occupancy());
-        if(valueOfKill==kingPrice)//Je možné vzít krále
-        {
-            board.setPieceAt(column,row,originalPiece);
-            totalMoves++;
-            return valueOfKill*occupancy();
-        }
-
-        float foundOnly = board.tryPiece(column+1,row+advanceRow(),availableOptions[i],depth-1,occupancy()*(-1),alpha,beta);
-        float foundVal = foundOnly+(valueOfKill+availableOptions[i]->price(row+advanceRow())-price(row))*occupancy();//+rowAdvantage;
-
-        if (foundVal*occupancy()>bestValue*occupancy())
-            bestValue=foundVal;
-        if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-            totalMoves++;
-
-    }
-
-}
-if(board.priceInLocation(column-1,row+advanceRow(), occupancy())>0)
-{
-    for (int_fast8_t i = 0; i < availableOptions.size(); ++i) {
-        float valueOfKill = board.priceInLocation(column-1,row+advanceRow(), occupancy());
-        if(valueOfKill==kingPrice)//Je možné vzít krále
-        {
-            board.setPieceAt(column,row,originalPiece);
-            totalMoves++;
-            return valueOfKill*occupancy();
-        }
-        float foundOnly = board.tryPiece(column-1,row+advanceRow(),availableOptions[i],depth-1,occupancy()*(-1),alpha,beta);
-        float foundVal = foundOnly+(valueOfKill+availableOptions[i]->price(row+advanceRow())-price(row))*occupancy();//+rowAdvantage;
-
-        if (foundVal*occupancy()>bestValue*occupancy())
-            bestValue=foundVal;
-        if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-            totalMoves++;
-    }
-    //res.emplace_back(board,board.priceInLocation(column-1,row+1, occupancy()));
-    //res[res.size()-1].first.movePiece(column,row,column-1,row+1);
-}               */
         board.setPieceAt(column, row, this);
 
         return bestValue;
@@ -676,7 +610,7 @@ if(board.priceInLocation(column-1,row+advanceRow(), occupancy())>0)
         vector<Piece*> availableOptions = evolveInto(row + advanceRow());
         //float rowAdvantage = 0;
         //if(availableOptions.size()==1)
-        {
+        //{
             //rowAdvantage = (6-abs(row-evolveRow()))/128.0;
 
             //bool allLineClear = true;
@@ -687,7 +621,7 @@ if(board.priceInLocation(column-1,row+advanceRow(), occupancy())>0)
 
                 //}
             //}
-        }
+        //}
 
 
         if (board.priceInLocation(column, row + advanceRow(), occupancy()) == 0) {
@@ -735,29 +669,6 @@ if(board.priceInLocation(column-1,row+advanceRow(), occupancy())>0)
 
         return res;
     }
-
-    /*
-        vector<pair<char,char>> availablePositionsNonBlockable() override
-        {
-            return {};
-        }
-        vector<pair<char,char>> availablePositionsTakeOnly() override
-        {
-            vector<pair<char,char>> res;
-            res.emplace_back(1,1);
-            res.emplace_back(-1,1);
-            return res;
-        }
-        vector<pair<char,char>> availablePositionsBlockable() override
-        {
-            vector<pair<char,char>> res;
-            res.emplace_back(0,1);
-            return res;
-        }*/
-
-
-
-
 };
 
 
@@ -769,9 +680,6 @@ struct Knight : public Piece {
 
         //if (depth <= 0)
           //  return 0;
-        //int_fast8_t totalMoves = 0;
-
-        //Piece* originalPiece = board.pieceAt(column,row);
         board.setPieceAt(column, row, nullptr);
 
         bool foundKing = false;
@@ -784,146 +692,6 @@ struct Knight : public Piece {
         tryChangeAndUpdateIfBetter(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalMoves, foundKing);
         tryChangeAndUpdateIfBetter(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, foundKing);
         tryChangeAndUpdateIfBetter(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, foundKing);
-
-        /*
-        if(board.priceInLocation(column+1,row+2, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column+1,row+2, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column+1,row+2,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column+1,row-2, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column+1,row-2, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column+1,row-2,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column+2,row+1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column+2,row+1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column+2,row+1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column+2,row-1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column+2,row-1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column+2,row-1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column-1,row+2, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column-1,row+2, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column-1,row+2,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column-1,row-2, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column-1,row-2, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column-1,row-2,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column-2,row+1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column-2,row+1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column-2,row+1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column-2,row-1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column-2,row-1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column-2,row-1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-
-*/
 
         board.setPieceAt(column, row, this);
 
@@ -986,7 +754,6 @@ struct Bishop : public Piece {
         float bestValue = INT32_MAX * (-1) * occupancy();
         //if (depth <= 0)
           //  return 0;
-        //int_fast8_t totalMoves = 0;
 
         board.setPieceAt(column, row, nullptr);
         bool foundKing = false;
@@ -1117,7 +884,6 @@ struct Rook : public Piece {
           //  return 0;
         //int_fast8_t totalMoves = 0;
 
-        //Piece *originalPiece = board.pieceAt(column, row);
         board.setPieceAt(column, row, nullptr);
 
         bool foundKing = false;
@@ -1248,7 +1014,6 @@ struct Queen : public Piece {
         // if (depth <= 0)
           //   return 0;
 
-         //int_fast8_t totalMoves = 0;
 
         Piece* originalPiece = board.pieceAt(column, row);
         board.setPieceAt(column, row, nullptr);
@@ -1482,13 +1247,8 @@ struct King : public Piece {
         float bestValue = INT32_MAX * (-1) * occupancy();
         //  if (depth <= 0)
           //    return 0;
-          //int_fast8_t totalMoves = 0;
         bool foundKing = false;
 
-        //if(depth>1)
-          //  board.print();
-
-        //Piece *originalPiece = board.pieceAt(column, row);
         board.setPieceAt(column, row, nullptr);
 
         tryChangeAndUpdateIfBetter(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, foundKing);
@@ -1499,144 +1259,6 @@ struct King : public Piece {
         tryChangeAndUpdateIfBetter(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, foundKing);
         tryChangeAndUpdateIfBetter(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, foundKing);
         tryChangeAndUpdateIfBetter(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, foundKing);
-
-        /*
-        if(board.priceInLocation(column+1,row+1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column+1,row+1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column+1,row+1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column+1,row, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column+1,row, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column+1,row,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column+1,row-1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column+1,row-1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column+1,row-1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column,row-1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column,row-1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column,row-1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column-1,row-1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column-1,row-1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column-1,row-1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column-1,row, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column-1,row, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column-1,row,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column-1,row+1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column-1,row+1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column-1,row+1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-        if(board.priceInLocation(column,row+1, occupancy())>=0){
-            float valueOfKill = board.priceInLocation(column,row+1, occupancy());
-            if(valueOfKill==kingPrice)//Je možné vzít krále
-
-                {
-                    board.setPieceAt(column,row,originalPiece);
-                    return pair<float,int_fast8_t>(valueOfKill*occupancy(),1);
-                }
-            float foundOnly = board.tryPiece(column,row+1,originalPiece,depth-1,occupancy()*(-1));
-            float foundVal = foundOnly+(valueOfKill*occupancy());
-
-            if (foundVal*occupancy()>bestValue*occupancy())
-                bestValue=foundVal;
-
-            if(!(depth>1&&(int)foundOnly*occupancy()*(-1)==kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
-                totalMoves++;
-        }
-*/
 
         board.setPieceAt(column, row, this);
 
