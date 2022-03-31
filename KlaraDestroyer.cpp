@@ -456,11 +456,11 @@ public:
             //Vesti cislo depth znamena ze nejsem jiz tak hluboko (tahy nastanou drive)
             int_fast8_t howFarFromInitial = (depthW - depth);
             int_fast8_t howFarFromInitialAfterExchange = ((howFarFromInitial+1) >> 1);//Kolikaty tah od initial pozice (od 0), ne pultah
-            bestValue -= onMove*(howFarFromInitial / 100000.0);//Pozdejsi tahy maji nizsi vahu, nevidim tam tolik dopredu co muze nasledovat - penalizovat hloubku a uprednostnovat co nejrychleji se dostat do vyhody, ale idealne aby se pouzilo v prioritě až nakonec, když je lepší tah tak si na něj počkám. Lepší počítat půltahy, přece jenom je to půtah informace navíc, může rozhodnout výměny např. dámy atd
+            bestValue -= onMove*(howFarFromInitialAfterExchange / 1000.0);//Pozdejsi tahy maji nizsi vahu, nevidim tam tolik dopredu co muze nasledovat - penalizovat hloubku a uprednostnovat co nejrychleji se dostat do vyhody, ale idealne aby se pouzilo v prioritě až nakonec, když je lepší tah tak si na něj počkám. Lepší počítat půltahy, přece jenom je to půtah informace navíc, může rozhodnout výměny např. dámy atd
             
             //Cil pokryt co nejvic poli, cim pozdeji tim lip. Napadena pole se pocitaji za vicenasobek, viz metoda u Piece
             if(depth<=2)//Zajimaji me pouze finální pozice, než k nim dojdu může být pozice klidně špatná jak chce (to že si je méně jistý koriguje druhý odečet). Omezení na hloubku 2 taky velmi zrychli program kvuli aplha/beta prorezavani.
-                bestValue += onMove*(totalMoves / 1000.0);//Cim vice moves, tim vetsi vyhoda. Konstanta je zvolená odhadem, těžko říct jakou zvolit
+                bestValue += onMove*(totalMoves / 100000.0);//Cim vice moves, tim vetsi vyhoda. Konstanta je zvolená odhadem, těžko říct jakou zvolit
             //bestValue += onMove * (totalMoves / (1000.0 * (howFarFromInitialAfterExchange + 1)));
         }
 
@@ -1773,7 +1773,7 @@ void workerFromQ()//, float alpha = -FLT_MAX, float beta = FLT_MAX)
 
 pair<Board, float> findBestOnSameLevel(vector<pair<double, Board>>& boards, int_fast8_t depth, char onMove)
 {
-    const int_fast8_t threadCount = 1;//thread::hardware_concurrency(); //4;
+    const int_fast8_t threadCount = 4;//thread::hardware_concurrency(); //4;
     vector<thread> threads;
 
 
@@ -2118,7 +2118,7 @@ void playGameResponding(Board board, char onMove)
     long long milliseconds = 5000;
     if (onMove < 0)
     {
-        //milliseconds = boardUserInput(board);
+        milliseconds = boardUserInput(board);
     }
     
     while (true)
@@ -2348,7 +2348,7 @@ int main() {
     //klaraHra.bestPosition(6,1);
     //playGameResponding(startingPosition(), -1);
     //benchmark();
-    playGameResponding(testMatu2,-1);
+    playGameResponding(startingPosition(), -1);
 
     return 0;
 }
