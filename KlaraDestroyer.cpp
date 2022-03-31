@@ -63,7 +63,7 @@ using namespace std;
 
 class Board;
 
-const int kingPrice = 1000000;
+const int kingPrice = 1000000000;
 
 bool itsTimeToStop;//atomic too slow
 char depthW;
@@ -324,12 +324,20 @@ public:
                 continue;
             if (found->occupancy() == onMove)
             {
+                if (i % 8 + 'a' == 'h' && i / 8 + '1' == '4')
+                {
+                    //wcout << endl;
+                    //print();
+                }
+                    
                 auto foundVal = found->bestPosition(*this, i % 8 + 'a', i / 8 + '1', depthToPieces, alpha, beta, totalMoves);
                 if (foundVal * onMove > bestValue * onMove) {
                     bestValue = foundVal;
                 }
                 if (foundVal * onMove == kingPrice)//Je možné vzít krále
                 {
+                    //wcout << endl;
+                    //print();
                     //break;
                     return foundVal;//*depth;
                 }
@@ -512,8 +520,8 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
 
             if ((depth > 1 && (int)foundOnly * occupancy() * (-1) == kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
             {
-                if (foundVal > 0)
-                    totalMoves -= 1;//Pole kde napadam souperovu figurku je cennejsi nez volne
+                //if (foundVal > 0)
+                    totalMoves -= 1;
                 //else
                   //  totalMoves-=1;
             }
@@ -1238,8 +1246,6 @@ struct Queen : public Piece {
     }
 };
 
-
-
 struct King : public Piece {
 
 
@@ -1814,12 +1820,12 @@ pair<Board, float> findBestOnSameLevel(vector<pair<double, Board>>& boards, int_
 
     std::sort(boards.begin(), boards.end());
 
-    
-        for (int i = 0; i < boards.size(); ++i) {
-            wcout<<boards[i].first<<endl;
-            boards[i].second.print();
-        }
-        wcout<<endl<<endl;
+    /*
+    for (int i = 0; i < boards.size(); ++i) {
+        wcout << boards[i].first << endl;
+        boards[i].second.print();
+    }
+    wcout << endl << endl;*/
 
 
     if (onMove == 1)
@@ -2112,7 +2118,7 @@ void playGameResponding(Board board, char onMove)
     long long milliseconds = 5000;
     if (onMove < 0)
     {
-        milliseconds = boardUserInput(board);
+        //milliseconds = boardUserInput(board);
     }
     
     while (true)
@@ -2342,7 +2348,7 @@ int main() {
     //klaraHra.bestPosition(6,1);
     //playGameResponding(startingPosition(), -1);
     //benchmark();
-    benchmark(8,testMatu2,-1);
+    playGameResponding(testMatu2,-1);
 
     return 0;
 }
