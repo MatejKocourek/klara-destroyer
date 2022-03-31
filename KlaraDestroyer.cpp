@@ -2145,7 +2145,7 @@ void workerFromQ()//, float alpha = -FLT_MAX, float beta = FLT_MAX)
 
 pair<Board, float> findBestOnSameLevel(vector<pair<double, Board>>& boards, int_fast8_t depth, char onMove)
 {
-    const int_fast8_t threadCount = 4;//thread::hardware_concurrency(); //4;
+    const int_fast8_t threadCount = 1;//thread::hardware_concurrency(); //4;
     vector<thread> threads;
 
 
@@ -2192,12 +2192,12 @@ pair<Board, float> findBestOnSameLevel(vector<pair<double, Board>>& boards, int_
 
     std::sort(boards.begin(), boards.end());
 
-    /*
+    
         for (int i = 0; i < boards.size(); ++i) {
             wcout<<boards[i].first<<endl;
             boards[i].second.print();
         }
-        wcout<<endl<<endl;*/
+        wcout<<endl<<endl;
 
 
     if (onMove == 1)
@@ -2257,7 +2257,7 @@ vector<pair<double, Board>> allBoardsFromPosition(Board& board, char onMove)
 pair<Board, float> findBestOnTopLevel(Board& board, int_fast8_t depth, char onMove)
 {
     auto tmp = allBoardsFromPosition(board, onMove);
-    return findBestOnSameLevel(tmp, depth - 1, onMove * (-1));
+    return findBestOnSameLevel(move(tmp), depth - 1, onMove * (-1));
 
 
     /*
@@ -2316,6 +2316,7 @@ pair<Board, float> findBestInTimeLimit(Board& board, char onMove, int millisecon
 
     pair<Board, float> res;
 
+    wcout << "Depth: ";
     for (int_fast8_t i = 3; i < 100; i+=2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i, onMove * (-1));
         if (itsTimeToStop)
@@ -2324,8 +2325,9 @@ pair<Board, float> findBestInTimeLimit(Board& board, char onMove, int millisecon
         {
             res = bestPosFound;
         }
-        wcout << "Depth " << i + 1 << " calculated" << endl;
+        wcout << i + 1 << ' ';
     }
+    wcout << endl;
     limit.join();
 
     return res;
@@ -2337,6 +2339,7 @@ pair<Board, float> findBestInNumberOfMoves(Board& board, char onMove, char moves
 
     pair<Board, float> res;
 
+    wcout << "Depth: ";
     for (int_fast8_t i = 3; i < moves; i+=2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i, onMove * (-1));
         if (itsTimeToStop)
@@ -2345,8 +2348,9 @@ pair<Board, float> findBestInNumberOfMoves(Board& board, char onMove, char moves
         {
             res = bestPosFound;
         }
-        wcout << "Depth " << i + 1 << " calculated" << endl;
+        wcout << i+1<<' ';
     }
+    wcout << endl;
 
     return res;
 }
@@ -2394,18 +2398,17 @@ Board startingPosition()
     return initial;
 }
 
-void benchmark()
+void benchmark(char depth = 8, Board board = startingPosition(), char onMove = 1)
 {
-
-
     auto start = chrono::high_resolution_clock::now();
     //doneMoves.clear();
     //auto result = findBestOnTopLevel(board,depth,onMove);
     //auto result = findBestInTimeLimit(board, onMove, timeToPlay);
-    auto result = findBestInNumberOfMoves(startingPosition(), 1, 8);
-    auto board = result.first;
-    wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+    auto result = findBestInNumberOfMoves(board, onMove, depth);
     auto end = chrono::high_resolution_clock::now();
+    board = result.first;
+    wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+    
 
     auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
     wcout << "Done in " << elapsed << "s." << endl;
@@ -2453,7 +2456,7 @@ void playGameInTime(Board board, char onMove, int timeToPlay)
 }
 
 
-void playGameResponding(Board board, char onMove)
+long long boardUserInput(Board& board)
 {
     board.print();
     string tmp;
@@ -2461,14 +2464,35 @@ void playGameResponding(Board board, char onMove)
     cin >> tmp;
     auto endHuman = chrono::high_resolution_clock::now();
 
+    //char columnOrig,rowOrig,columnTo,rowTo;
+//cin>>columnOrig;
+//cin>>rowOrig;
+//cin>>columnTo;
+//cin>>rowTo;
+
+//initial.movePiece(columnOrig,rowOrig,columnTo,rowTo);
+
+
     board.deleteAndMovePiece(tmp[0], tmp[1], tmp[2], tmp[3]);
     if (tmp.size() > 4)
         board.deleteAndMovePiece(tmp[5], tmp[6], tmp[7], tmp[8]);
 
     auto elapsedHuman = chrono::duration_cast<chrono::milliseconds>(endHuman - startHuman).count();
     wcout << "Human moved in " << elapsedHuman / 1000.0 << "s." << endl;
-    int milliseconds = elapsedHuman;
+
     board.print();
+    return elapsedHuman;
+}
+
+
+void playGameResponding(Board board, char onMove)
+{
+    long long milliseconds = 5000;
+    if (onMove < 0)
+    {
+        milliseconds = boardUserInput(board);
+    }
+    
     while (true)
     {
         auto start = chrono::high_resolution_clock::now();
@@ -2476,51 +2500,19 @@ void playGameResponding(Board board, char onMove)
         //auto result = findBestOnTopLevel(board,depth,onMove);
         auto result = findBestInTimeLimit(board, onMove, milliseconds);
         //auto result = findBestInNumberOfMoves(board, onMove, 8);
+        auto end = chrono::high_resolution_clock::now();
         board = result.first;
         wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
-        auto end = chrono::high_resolution_clock::now();
 
         auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
         wcout << "PC answered in " << elapsed << "s." << endl;
 
-        board.print();
-        string tmp;
-
-
-        auto startHuman = chrono::high_resolution_clock::now();
-        cin >> tmp;
-        auto endHuman = chrono::high_resolution_clock::now();
-
-        
-
-
-        //char columnOrig,rowOrig,columnTo,rowTo;
-        //cin>>columnOrig;
-        //cin>>rowOrig;
-        //cin>>columnTo;
-        //cin>>rowTo;
-
-        //initial.movePiece(columnOrig,rowOrig,columnTo,rowTo);
-
-        board.deleteAndMovePiece(tmp[0], tmp[1], tmp[2], tmp[3]);
-        if (tmp.size() > 4)
-            board.deleteAndMovePiece(tmp[5], tmp[6], tmp[7], tmp[8]);
-
-
-        board.print();
-
-        auto elapsedHuman = chrono::duration_cast<chrono::milliseconds>(endHuman - startHuman).count();
-        wcout << "Human moved in " << elapsedHuman/1000.0 << "s." << endl;
-        milliseconds = elapsedHuman;
-
+        milliseconds = boardUserInput(board);
     }
 }
 
 int main() {
-    
-
     std::wcout.sync_with_stdio(false);
-
     init_locale();
 
 
@@ -2708,102 +2700,27 @@ int main() {
     testMatuDama.deleteAndOverwritePiece('b', '1', new QueenWhite());
 
 
-  
+    Board testMatu2;
+    testMatu2.setPieceAt('a', '8', new RookBlack());
+    testMatu2.setPieceAt('e', '8', new KingBlack());
+    testMatu2.setPieceAt('e', '8', new KingBlack());
+    testMatu2.setPieceAt('c', '7', new PawnBlack());
+    testMatu2.setPieceAt('e', '7', new KnightBlack());
+    testMatu2.setPieceAt('f', '7', new PawnBlack());
+    testMatu2.setPieceAt('g', '7', new PawnBlack());
+    testMatu2.setPieceAt('a', '6', new PawnBlack());
+    testMatu2.setPieceAt('a', '5', new PawnWhite());
+    testMatu2.setPieceAt('d', '5', new PawnBlack());
+    testMatu2.setPieceAt('e', '5', new KingWhite());
+    testMatu2.setPieceAt('f', '5', new BishopBlack());
+    testMatu2.setPieceAt('c', '4', new PawnBlack());
+    testMatu2.setPieceAt('h', '2', new RookBlack());
 
 
     //klaraHra.bestPosition(6,1);
-    playGameResponding(startingPosition(), -1);
+    //playGameResponding(startingPosition(), -1);
     //benchmark();
-
-    return 0;
-    /*
-        char onMove = 1;
-        vector<pair<Board,int>> firstMoves;
-        priority_queue<BoardDerivative> toCheck;
-
-        //int bestPrice = INT32_MIN;
-        //Board* bestPosition = nullptr;
-
-        for (char j = '1'; j <= '8'; ++j) {
-            for (char i = 'a'; i <= 'h'; ++i) {
-                Piece *found = initial.pieceAt(i, j);
-                if (found->occupancy() == onMove)
-                {
-                    auto possibleMoves = found->availablePositions(initial, i, j);
-                    firstMoves.insert(firstMoves.end(),possibleMoves.begin(),possibleMoves.end());
-                }
-            }
-        }
-
-        for (int k = 0; k < firstMoves.size(); ++k) {
-            toCheck.emplace(firstMoves[k].first,&firstMoves[k].first,firstMoves[k].second,1,onMove*(-1));
-        }
-
-        while(!toCheck.empty())
-        {
-            BoardDerivative tmp = toCheck.top();
-            toCheck.pop();
-
-            wcout<<tmp.depth<<endl;
-            tmp.board.print();
-            wcout<<endl;
-
-
-            bool notAbleToPlay = true;
-            if(tmp.price>100||tmp.price<-100)
-            {
-
-            }
-            else
-            {
-                for (char j = '1'; j <= '8'; ++j) {
-                    for (char i = 'a'; i <= 'h'; ++i) {
-                        Piece *found = tmp.board.pieceAt(i, j);
-                        if (found->occupancy() == tmp.onMove)
-                        {
-                            auto possibleMoves = found->availablePositions(tmp.board, i, j);
-                            for (int k = 0; k < possibleMoves.size(); ++k) {//*tmp.onMove
-                                toCheck.emplace(possibleMoves[k].first,tmp.original,tmp.price+possibleMoves[k].second,tmp.depth+1, tmp.onMove*(-1));
-                                notAbleToPlay=false;
-                            }
-                        }
-                    }
-                }
-            }
-            if(notAbleToPlay)
-            {
-
-            }
-
-
-
-
-        }*/
-
-        /*
-            for (int i = 0; i < firstMoves.size(); ++i) {
-                firstMoves[i].first.print();
-            }*/
+    benchmark(8,testMatu2,-1);
 
     return 0;
 }
-/*
-char positionScore(char* position, char howDeep, char white, short score)
-{
-    if(howDeep<=0)
-        return score;
-    map<char,char[64]> possibleMoves;
-    for (int i = 0; i < 64; ++i) {
-        switch (position[i]) {
-            case 1:
-                if(i%8!=0)
-                {
-                    if(i+7<64)
-                    {
-                        if(position[i+7]*white<0)
-
-                    }
-                }
-        }
-    }
-}*/
