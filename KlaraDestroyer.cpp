@@ -52,7 +52,7 @@ void init_locale(void)
     std::locale::global(std::locale(locale_name));
     std::wcin.imbue(std::locale())
         std::wcout.imbue(std::locale());
-    
+
 #endif
 }
 
@@ -299,8 +299,59 @@ public:
 
         return res;
     }
+    /*
+    vector<pair<Board,float>> allPositionsScore(int_fast8_t depth, int_fast8_t onMove)
+    {
+        float alpha = -FLT_MAX;
+        float beta = FLT_MAX;
+        vector<pair<Board,float>> res;
+        if (depth == 0)
+            return res;
+        double bestValue = INT32_MAX * onMove * (-1);
 
-    float bestPosition(int_fast8_t depth, char onMove, float alpha = -FLT_MAX, float beta = FLT_MAX)
+        uint_fast16_t totalMoves = 0;
+        int depthToPieces = depth;
+
+        for (int_fast8_t i = 0; i < 64; ++i) {
+            Piece* found = pieces[i];
+
+            if (found == nullptr)
+                continue;
+            if (found->occupancy() == onMove)
+            {
+                auto foundVal = found->bestPosition(*this, (i & 0b111) + 'a', (i >> 3) + '1', depthToPieces, alpha, beta, totalMoves);
+            }
+
+            //firstMoves.insert(firstMoves.end(),possibleMoves.begin(),possibleMoves.end());
+        }
+
+
+        //if(depth==1)
+            //bestValue+=((totalMoves*onMove)/1000.0);
+
+
+        if (depthW != depth)//sude hloubky hraje PC, liche souper. DepthW je depth na zacatku, to hraje souper, tah PC neni ohodnocen, takze by bylo nefer ohodnotit souperuv
+        {
+            //Vesti cislo depth znamena ze nejsem jiz tak hluboko (tahy nastanou drive)
+            int_fast8_t howFarFromInitial = (depthW - depth);
+            int_fast8_t howFarFromInitialAfterExchange = ((howFarFromInitial + 1) >> 1);//Kolikaty tah od initial pozice (od 0), ne pultah
+            //bestValue -= onMove*(howFarFromInitialAfterExchange / 1000.0);//Pozdejsi tahy maji nizsi vahu, nevidim tam tolik dopredu co muze nasledovat - penalizovat hloubku a uprednostnovat co nejrychleji se dostat do vyhody, ale idealne aby se pouzilo v prioritě až nakonec, když je lepší tah tak si na něj počkám. Lepší počítat půltahy, přece jenom je to půtah informace navíc, může rozhodnout výměny např. dámy atd
+
+            //Cil pokryt co nejvic poli, cim pozdeji tim lip. Napadena pole se pocitaji za vicenasobek, viz metoda u Piece
+            //if(depth<=2)//Zajimaji me pouze finální pozice, než k nim dojdu může být pozice klidně špatná jak chce (to že si je méně jistý koriguje druhý odečet). Omezení na hloubku 2 taky velmi zrychli program kvuli aplha/beta prorezavani.
+                //bestValue += onMove*(totalMoves / 100000.0);//Cim vice moves, tim vetsi vyhoda. Konstanta je zvolená odhadem, těžko říct jakou zvolit
+            bestValue += onMove * (totalMoves / (1000.0 * (howFarFromInitialAfterExchange + 1)));
+        }
+
+        //wcout<<"moves"<<totalMoves<<endl;
+        //print();
+
+
+        //doneMoves.emplace(board.printBasic(),bestValue);
+        return bestValue;//+((totalMoves*onMove)/(1000.0*depth));
+    }*/
+
+    float bestPositionScore(int_fast8_t depth, char onMove, float alpha = -FLT_MAX, float beta = FLT_MAX)
     {
         if (depth == 0)
             return 0;
@@ -324,13 +375,7 @@ public:
                 continue;
             if (found->occupancy() == onMove)
             {
-                if (i % 8 + 'a' == 'h' && i / 8 + '1' == '4')
-                {
-                    //wcout << endl;
-                    //print();
-                }
-                    
-                auto foundVal = found->bestPosition(*this, i % 8 + 'a', i / 8 + '1', depthToPieces, alpha, beta, totalMoves);
+                auto foundVal = found->bestPosition(*this, (i & 0b111) + 'a', (i >> 3) + '1', depthToPieces, alpha, beta, totalMoves);
                 if (foundVal * onMove > bestValue * onMove) {
                     bestValue = foundVal;
                 }
@@ -346,41 +391,7 @@ public:
                     depthToPieces = 0;
                     //break;
                 }
-
-                //  return 0;//INT32_MAX*onMove*(-1);
-
-                //auto possibleMoves = found->availablePositions(board, i, j);
-                //totalMoves+=possibleMoves.size();
-                //totalMoves+=foundVal.second;
-/*
-                    for (int k = 0; k < possibleMoves.size(); ++k) {
-                        if(possibleMoves[k].second==kingPrice)//Je možné vzít krále
-                        {
-                            return (possibleMoves[k].second*depth)*onMove;
-                        }
-                        float foundOnly = 0;
-                        if(depth>1)
-                        {
-                            foundOnly = findBestOn(possibleMoves[k].first,depth-1,onMove*(-1));
-                            if((int)foundOnly*onMove*(-1)==kingPrice*(depth-1))//V dalším tahu bych přišel o krále, není to legitimní tah
-                            {
-                                totalMoves--;
-                            }
-                        }*/
-
-                        //float foundOnly = findBestOn(possibleMoves[k].first,depth-1,onMove*(-1));
-
-                        //if(depth>1&&(int)foundOnly*onMove*(-1)==kingPrice*(depth-1))//V dalším tahu bych přišel o krále, není to legitimní tah
-                        //{
-                        //    totalMoves--;
-                        //}
-
-                        //float foundVal = foundOnly+possibleMoves[k].second*onMove;
-                        //float foundWithMoves = foundVal.first+(foundVal.second/1000.0*depth);
-
             }
-
-            //firstMoves.insert(firstMoves.end(),possibleMoves.begin(),possibleMoves.end());
         }
 
         /*
@@ -430,7 +441,7 @@ public:
         if (totalMoves == 0)//Nemůžu udělat žádný legitimní tah (pat nebo mat)
         {
             //print();
-            if (bestPosition(1, onMove * (-1), alpha, beta) * onMove * (-1) == kingPrice)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
+            if (bestPositionScore(1, onMove * (-1), alpha, beta) * onMove * (-1) == kingPrice)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
             {
                 //print();
                 bestValue = -100000 * depth * onMove;//Dostanu mat, co nejnižší skóre
@@ -455,13 +466,13 @@ public:
         {
             //Vesti cislo depth znamena ze nejsem jiz tak hluboko (tahy nastanou drive)
             int_fast8_t howFarFromInitial = (depthW - depth);
-            int_fast8_t howFarFromInitialAfterExchange = ((howFarFromInitial+1) >> 1);//Kolikaty tah od initial pozice (od 0), ne pultah
-            bestValue -= onMove*(howFarFromInitialAfterExchange / 1000.0);//Pozdejsi tahy maji nizsi vahu, nevidim tam tolik dopredu co muze nasledovat - penalizovat hloubku a uprednostnovat co nejrychleji se dostat do vyhody, ale idealne aby se pouzilo v prioritě až nakonec, když je lepší tah tak si na něj počkám. Lepší počítat půltahy, přece jenom je to půtah informace navíc, může rozhodnout výměny např. dámy atd
-            
+            int_fast8_t howFarFromInitialAfterExchange = ((howFarFromInitial + 1) >> 1);//Kolikaty tah od initial pozice (od 0), ne pultah
+            //bestValue -= onMove*(howFarFromInitialAfterExchange / 1000.0);//Pozdejsi tahy maji nizsi vahu, nevidim tam tolik dopredu co muze nasledovat - penalizovat hloubku a uprednostnovat co nejrychleji se dostat do vyhody, ale idealne aby se pouzilo v prioritě až nakonec, když je lepší tah tak si na něj počkám. Lepší počítat půltahy, přece jenom je to půtah informace navíc, může rozhodnout výměny např. dámy atd
+
             //Cil pokryt co nejvic poli, cim pozdeji tim lip. Napadena pole se pocitaji za vicenasobek, viz metoda u Piece
-            if(depth<=2)//Zajimaji me pouze finální pozice, než k nim dojdu může být pozice klidně špatná jak chce (to že si je méně jistý koriguje druhý odečet). Omezení na hloubku 2 taky velmi zrychli program kvuli aplha/beta prorezavani.
-                bestValue += onMove*(totalMoves / 100000.0);//Cim vice moves, tim vetsi vyhoda. Konstanta je zvolená odhadem, těžko říct jakou zvolit
-            //bestValue += onMove * (totalMoves / (1000.0 * (howFarFromInitialAfterExchange + 1)));
+            //if(depth<=2)//Zajimaji me pouze finální pozice, než k nim dojdu může být pozice klidně špatná jak chce (to že si je méně jistý koriguje druhý odečet). Omezení na hloubku 2 taky velmi zrychli program kvuli aplha/beta prorezavani.
+                //bestValue += onMove*(totalMoves / 100000.0);//Cim vice moves, tim vetsi vyhoda. Konstanta je zvolená odhadem, těžko říct jakou zvolit
+            bestValue += onMove * (totalMoves / (1000.0 * (howFarFromInitialAfterExchange + 1)));
         }
 
         //wcout<<"moves"<<totalMoves<<endl;
@@ -477,7 +488,7 @@ public:
     {
         Piece* backup = pieceAt(column, row);
         setPieceAt(column, row, p);
-        auto foundVal = bestPosition(depth, occupancyToTry, alpha, beta);
+        auto foundVal = bestPositionScore(depth, occupancyToTry, alpha, beta);
         setPieceAt(column, row, backup);
         return foundVal;
     }
@@ -521,7 +532,7 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
             if ((depth > 1 && (int)foundOnly * occupancy() * (-1) == kingPrice))//V dalším tahu bych přišel o krále, není to legitimní tah
             {
                 //if (foundVal > 0)
-                    totalMoves -= 1;
+                totalMoves -= 1;
                 //else
                   //  totalMoves-=1;
             }
@@ -587,7 +598,7 @@ struct Pawn : public Piece {
 
                 }
             }*/
-       // }
+            // }
 
 
         board.setPieceAt(column, row, nullptr);
@@ -1518,6 +1529,7 @@ struct PawnWhite :public Pawn {
 
 
     float price(char row) const override {
+        return 1;
         switch (row) {
         case '5':
             return 1.5;
@@ -1578,6 +1590,7 @@ struct PawnBlack :public Pawn {
     }
 
     float price(char row) const override {
+        return 1;
         switch (row) {
         case '4':
             return 1.5;
@@ -1743,13 +1756,13 @@ void findOutArgument(Board board, int_fast8_t depth, char onMove, double* res)//
 
     if (onMove < 0)
     {
-        float result = toDestroy.bestPosition(depth, onMove, alphaOrBeta, FLT_MAX);
+        float result = toDestroy.bestPositionScore(depth, onMove, alphaOrBeta, FLT_MAX);
         alphaOrBeta = max(alphaOrBeta * 1.0, result * 1.0);
         *res += result;
     }
     else
     {
-        float result = toDestroy.bestPosition(depth, onMove, -FLT_MAX, alphaOrBeta);
+        float result = toDestroy.bestPositionScore(depth, onMove, -FLT_MAX, alphaOrBeta);
         alphaOrBeta = min(alphaOrBeta * 1.0, result * 1.0);
         *res += result;
     }
@@ -1945,7 +1958,7 @@ pair<Board, float> findBestInTimeLimit(Board& board, char onMove, int millisecon
     pair<Board, float> res;
 
     wcout << "Depth: ";
-    for (int_fast8_t i = 3; i < 100; i+=2) {
+    for (int_fast8_t i = 3; i < 100; i += 2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i, onMove * (-1));
         if (itsTimeToStop)
             break;
@@ -1968,7 +1981,7 @@ pair<Board, float> findBestInNumberOfMoves(Board& board, char onMove, char moves
     pair<Board, float> res;
 
     wcout << "Depth: ";
-    for (int_fast8_t i = 3; i < moves; i+=2) {
+    for (int_fast8_t i = 3; i < moves; i += 2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i, onMove * (-1));
         if (itsTimeToStop)
             break;
@@ -1976,7 +1989,7 @@ pair<Board, float> findBestInNumberOfMoves(Board& board, char onMove, char moves
         {
             res = bestPosFound;
         }
-        wcout << i+1<<' ';
+        wcout << i + 1 << ' ';
     }
     wcout << endl;
 
@@ -2036,7 +2049,7 @@ void benchmark(char depth = 8, Board board = startingPosition(), char onMove = 1
     auto end = chrono::high_resolution_clock::now();
     board = result.first;
     wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
-    
+
 
     auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
     wcout << "Done in " << elapsed << "s." << endl;
@@ -2053,7 +2066,7 @@ void playGameInTime(Board board, char onMove, int timeToPlay)
         //doneMoves.clear();
         //auto result = findBestOnTopLevel(board,depth,onMove);
         //auto result = findBestInTimeLimit(board, onMove, timeToPlay);
-        auto result = findBestInNumberOfMoves(board,onMove,8);
+        auto result = findBestInNumberOfMoves(board, onMove, 8);
         board = result.first;
         wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
         auto end = chrono::high_resolution_clock::now();
@@ -2109,7 +2122,7 @@ long long boardUserInput(Board& board)
     wcout << "Human moved in " << elapsedHuman / 1000.0 << "s." << endl;
 
     board.print();
-    return elapsedHuman;
+    return elapsedHuman + 10;
 }
 
 
@@ -2120,7 +2133,7 @@ void playGameResponding(Board board, char onMove)
     {
         milliseconds = boardUserInput(board);
     }
-    
+
     while (true)
     {
         auto start = chrono::high_resolution_clock::now();
@@ -2345,10 +2358,50 @@ int main() {
     testMatu2.setPieceAt('h', '2', new RookBlack());
 
 
+    Board initial;
+
+    initial.deleteAndOverwritePiece('a', '1', new RookWhite());
+    initial.deleteAndOverwritePiece('b', '3', new KnightWhite());
+    //initial.deleteAndOverwritePiece('c', '1', new BishopWhite());
+    initial.deleteAndOverwritePiece('d', '1', new QueenWhite());
+    initial.deleteAndOverwritePiece('e', '2', new KingWhite());
+    initial.deleteAndOverwritePiece('f', '1', new BishopWhite());
+    initial.deleteAndOverwritePiece('f', '3', new KnightWhite());
+    initial.deleteAndOverwritePiece('h', '1', new RookWhite());
+
+    initial.deleteAndOverwritePiece('a', '3', new PawnWhite());
+    initial.deleteAndOverwritePiece('b', '4', new PawnWhite());
+    initial.deleteAndOverwritePiece('c', '4', new PawnWhite());
+    initial.deleteAndOverwritePiece('c', '5', new PawnWhite());
+    initial.deleteAndOverwritePiece('e', '3', new PawnWhite());
+    initial.deleteAndOverwritePiece('f', '2', new PawnWhite());
+    initial.deleteAndOverwritePiece('g', '2', new PawnWhite());
+    initial.deleteAndOverwritePiece('h', '2', new PawnWhite());
+
+    initial.deleteAndOverwritePiece('a', '8', new RookBlack());
+    initial.deleteAndOverwritePiece('b', '8', new KnightBlack());
+    initial.deleteAndOverwritePiece('c', '8', new BishopBlack());
+    initial.deleteAndOverwritePiece('b', '2', new QueenBlack());
+    initial.deleteAndOverwritePiece('e', '8', new KingBlack());
+    //initial.deleteAndOverwritePiece('f', '8', new BishopBlack());
+    initial.deleteAndOverwritePiece('e', '7', new KnightBlack());
+    initial.deleteAndOverwritePiece('h', '8', new RookBlack());
+    //initial.deleteAndOverwritePiece('h', '7', new RookWhite());
+
+    initial.deleteAndOverwritePiece('a', '7', new PawnBlack());
+    initial.deleteAndOverwritePiece('b', '7', new PawnBlack());
+    //initial.deleteAndOverwritePiece('c', '7', new PawnBlack());
+    initial.deleteAndOverwritePiece('d', '7', new PawnBlack());
+    initial.deleteAndOverwritePiece('e', '6', new PawnBlack());
+    initial.deleteAndOverwritePiece('f', '7', new PawnBlack());
+    initial.deleteAndOverwritePiece('g', '7', new PawnBlack());
+    initial.deleteAndOverwritePiece('h', '5', new PawnBlack());
+
+
     //klaraHra.bestPosition(6,1);
     //playGameResponding(startingPosition(), -1);
-    //benchmark();
-    playGameResponding(startingPosition(), -1);
+    benchmark();
+    //playGameResponding(startingPosition(), -1);
 
     return 0;
 }
