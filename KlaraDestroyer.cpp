@@ -195,20 +195,25 @@ public:
     void deleteAndOverwritePiece(char column, char row, Piece* p)
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
-            return;
-        else
-        {
-            delete pieces[(column - 'a') + (row - '1') * 8];
-            pieces[(column - 'a') + (row - '1') * 8] = p;
-        }
+            throw new exception("Invalid coordinates");
+
+        delete pieces[(column - 'a') + (row - '1') * 8];
+        pieces[(column - 'a') + (row - '1') * 8] = p;
     }
 
     void deleteAndMovePiece(char columnFrom, char rowFrom, char columnTo, char rowTo)
     {
+        if (columnFrom < 'a' || columnFrom>'h' || rowFrom < '1' || rowFrom>'8' || columnTo < 'a' || columnTo>'h' || rowTo < '1' || rowTo>'8')
+            throw exception("Invalid coordinates");
+
         const uint_fast8_t posFrom = (columnFrom - 'a') + (rowFrom - '1') * 8;
         const uint_fast8_t posTo = (columnTo - 'a') + (rowTo - '1') * 8;
 
-        delete pieces[posTo];
+        if (pieces[posFrom] == nullptr)
+            throw exception("Trying to move empty field");
+
+        if(pieces[posTo] != nullptr)
+            delete pieces[posTo];
         pieces[posTo] = pieces[posFrom];
         pieces[posFrom] = nullptr;
     }
@@ -1236,7 +1241,7 @@ pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fas
 
     std::stable_sort(boards.begin(), boards.end());
 
-
+    
     for (int i = 0; i < boards.size(); ++i) {
         wcout << boards[i].bestFoundValue << endl;
         boards[i].board.print();
@@ -1253,9 +1258,6 @@ pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fas
         return { boards[boards.size() - 1].board,boards[boards.size() - 1].bestFoundValue };
     }
 
-    //b.print();
-    //wcout<<depth<<endl;
-    //return bestValue;
 }
 
 void timeLimit(int milliseconds)
@@ -1294,7 +1296,7 @@ pair<Board, double> findBestInTimeLimit(Board& board, char onMove, int milliseco
     evaluateMoves = true;
 
     wcout << "Depth: ";
-    for (int_fast8_t i = 4; i < 100; i += 2) {
+    for (int_fast8_t i = 3; i < 100; i += 2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i, onMove * (-1));
         evaluateMoves = false;
         if (itsTimeToStop)
@@ -1399,45 +1401,6 @@ void benchmark(char depth = 8, Board board = startingPosition(), char onMove = 1
     board.print();
 }
 
-void playGameInTime(Board board, char onMove, int timeToPlay)
-{
-    board.print();
-    while (true)
-    {
-        auto start = chrono::high_resolution_clock::now();
-        //doneMoves.clear();
-        //auto result = findBestOnTopLevel(board,depth,onMove);
-        //auto result = findBestInTimeLimit(board, onMove, timeToPlay);
-        auto result = findBestInNumberOfMoves(board, onMove, 8);
-        board = result.first;
-        wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
-        auto end = chrono::high_resolution_clock::now();
-
-        auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
-        wcout << "Done in " << elapsed << "s." << endl;
-
-        board.print();
-        string tmp;
-        cin >> tmp;
-
-        //char columnOrig,rowOrig,columnTo,rowTo;
-        //cin>>columnOrig;
-        //cin>>rowOrig;
-        //cin>>columnTo;
-        //cin>>rowTo;
-
-        //initial.movePiece(columnOrig,rowOrig,columnTo,rowTo);
-
-        board.deleteAndMovePiece(tmp[0], tmp[1], tmp[2], tmp[3]);
-        if (tmp.size() > 4)
-            board.deleteAndMovePiece(tmp[5], tmp[6], tmp[7], tmp[8]);
-
-
-        board.print();
-
-    }
-}
-
 
 long long boardUserInput(Board& board)
 {
@@ -1455,10 +1418,44 @@ long long boardUserInput(Board& board)
 
 //initial.movePiece(columnOrig,rowOrig,columnTo,rowTo);
 
+    while (true)
+    {
+        try
+        {
+            if (tmp.length()<4)
+                throw exception("bad input");
+            if (tmp[0] == 'w' && tmp[1] == 'q')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new QueenWhite());
+            else if (tmp[0] == 'b' && tmp[1] == 'q')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new QueenBlack());
+            else if (tmp[0] == 'w' && tmp[1] == 'r')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new RookWhite());
+            else if (tmp[0] == 'b' && tmp[1] == 'r')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new RookBlack());
+            else if (tmp[0] == 'w' && tmp[1] == 'b')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new BishopWhite());
+            else if (tmp[0] == 'b' && tmp[1] == 'b')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new BishopBlack());
+            else if (tmp[0] == 'w' && tmp[1] == 'k')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new KnightWhite());
+            else if (tmp[0] == 'b' && tmp[1] == 'k')
+                board.deleteAndOverwritePiece(tmp[2], tmp[3], new KnightBlack());
+            else
+            {
+                board.deleteAndMovePiece(tmp[0], tmp[1], tmp[2], tmp[3]);
+                if (tmp.size() > 4)
+                    board.deleteAndMovePiece(tmp[5], tmp[6], tmp[7], tmp[8]);
+            }
 
-    board.deleteAndMovePiece(tmp[0], tmp[1], tmp[2], tmp[3]);
-    if (tmp.size() > 4)
-        board.deleteAndMovePiece(tmp[5], tmp[6], tmp[7], tmp[8]);
+            break;
+        }
+        catch (const std::exception& e)
+        {
+            std::wcout << e.what() << endl;
+            cin >> tmp;
+        }
+    }
+
 
     auto elapsedHuman = chrono::duration_cast<chrono::milliseconds>(endHuman - startHuman).count();
     wcout << "Human moved in " << elapsedHuman / 1000.0 << "s." << endl;
@@ -1466,6 +1463,32 @@ long long boardUserInput(Board& board)
     board.print();
     return elapsedHuman + 10;
 }
+
+
+void playGameInTime(Board board, char onMove, int timeToPlay)
+{
+    board.print();
+    if (onMove < 0)
+    {
+        boardUserInput(board);
+    }
+    
+    while (true)
+    {
+        auto start = chrono::high_resolution_clock::now();
+        auto result = findBestInTimeLimit(board, onMove, timeToPlay);
+        board = result.first;
+        wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+        auto end = chrono::high_resolution_clock::now();
+
+        auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
+        wcout << "Done in " << elapsed << "s." << endl;
+
+        boardUserInput(board);
+
+    }
+}
+
 
 
 void playGameResponding(Board board, char onMove)
@@ -1669,7 +1692,7 @@ int main() {
 
     Board testMatu;
     testMatu.deleteAndOverwritePiece('h', '8', new KingBlack());
-    testMatu.deleteAndOverwritePiece('2', '8', new KingWhite());
+    testMatu.deleteAndOverwritePiece('b', '8', new KingWhite());
     testMatu.deleteAndOverwritePiece('g', '1', new RookWhite());
     testMatu.deleteAndOverwritePiece('a', '7', new RookWhite());
     testMatu.deleteAndOverwritePiece('b', '1', new QueenWhite());
@@ -1769,8 +1792,8 @@ int main() {
     //klaraHra.bestPosition(6,1);
     //playGameResponding(startingPosition(), -1);
     //benchmark();
-    //playGameResponding(startingPosition(), -1);
-    benchmark(8, startingPosition(), 1);
+    playGameResponding(startingPosition(), -1);
+    //benchmark(8, startingPosition(), 1);
 
     return 0;
 }
