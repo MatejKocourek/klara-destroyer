@@ -1166,7 +1166,7 @@ void findOutArgument(BoardWithValues* board, int_fast8_t depth, char onMove)//, 
 {
     Board toDestroy(board->board);
 
-    if (onMove > 0)
+    if (onMove < 0)
     {
         board->bestFoundValue= toDestroy.bestPositionScore(depth, onMove, board->pieceTakenValue, alphaOrBeta, DBL_MAX);
         alphaOrBeta = max(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
@@ -1178,7 +1178,7 @@ void findOutArgument(BoardWithValues* board, int_fast8_t depth, char onMove)//, 
     }
 
 
-    wcout << "New alpha/beta: " << alphaOrBeta << endl;
+    //wcout << "New alpha/beta: " << alphaOrBeta << endl;
 }
 
 
@@ -1200,10 +1200,10 @@ auto stopper = BoardWithValues(Board(), -DBL_MAX, -DBL_MAX);
 
 pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fast8_t depth, char onMove)
 {
-    const int_fast8_t threadCount = 1;//thread::hardware_concurrency(); //4;
+    const int_fast8_t threadCount = 4;//thread::hardware_concurrency(); //4;
     vector<thread> threads;
 
-    if (onMove > 0)
+    if (onMove < 0)
         alphaOrBeta = -DBL_MAX;
     else
         alphaOrBeta = DBL_MAX;
@@ -1241,12 +1241,16 @@ pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fas
 
     std::stable_sort(boards.begin(), boards.end());
 
-    
-    for (int i = 0; i < boards.size(); ++i) {
-        wcout << boards[i].bestFoundValue << endl;
-        boards[i].board.print();
+    if (!itsTimeToStop)
+    {
+        for (int i = 0; i < boards.size(); ++i) {
+            wcout << boards[i].bestFoundValue << endl;
+            wcout << boards[i].pieceTakenValue << endl;
+            boards[i].board.print();
+        }
+        wcout << endl << endl;
     }
-    wcout << endl << endl;
+    
 
 
     if (onMove == 1)
@@ -1276,6 +1280,7 @@ vector<BoardWithValues> allBoardsFromPosition(Board& board, char onMove)
     saveToVector = false;
     auto res = firstPositions;
     firstPositions.clear();
+    std::stable_sort(res.begin(), res.end());
     return res;
 }
 
@@ -1291,6 +1296,11 @@ pair<Board, double> findBestInTimeLimit(Board& board, char onMove, int milliseco
     auto limit = thread(timeLimit, milliseconds);
 
     auto boardList = allBoardsFromPosition(board, onMove);
+    //for (size_t i = 0; i < boardList.size(); i++)
+    //{
+    //    wcout << boardList[i].pieceTakenValue << endl;
+    //    boardList[i].board.print();
+    //}
 
     pair<Board, double> res;
     evaluateMoves = true;
@@ -1692,7 +1702,7 @@ int main() {
 
     Board testMatu;
     testMatu.deleteAndOverwritePiece('h', '8', new KingBlack());
-    testMatu.deleteAndOverwritePiece('b', '8', new KingWhite());
+    testMatu.deleteAndOverwritePiece('a', '1', new KingWhite());
     testMatu.deleteAndOverwritePiece('g', '1', new RookWhite());
     testMatu.deleteAndOverwritePiece('a', '7', new RookWhite());
     testMatu.deleteAndOverwritePiece('b', '1', new QueenWhite());
@@ -1789,11 +1799,16 @@ int main() {
     lossOfQueenPossible.deleteAndOverwritePiece('e', '7', new PawnBlack());
     lossOfQueenPossible.deleteAndOverwritePiece('c', '7', new PawnBlack());
 
+    Board checkTest(startingPosition());
+    checkTest.deleteAndOverwritePiece('a', '4',new BishopWhite());
+    checkTest.deleteAndOverwritePiece('e', '6', new QueenWhite());
+    checkTest.deleteAndOverwritePiece('f', '7', nullptr);
+
     //klaraHra.bestPosition(6,1);
     //playGameResponding(startingPosition(), -1);
     //benchmark();
-    playGameResponding(startingPosition(), -1);
-    //benchmark(8, startingPosition(), 1);
+    //playGameResponding(endgame2, 1);
+    benchmark(8, testMatuDama, 1);
 
     return 0;
 }
