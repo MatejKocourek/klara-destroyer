@@ -120,14 +120,8 @@ public:
     Board(Board&& move) noexcept
     {
         for (uint_fast8_t i = 0; i < 64; ++i) {
-            //if (move.pieces[i] == nullptr)
-             //   pieces[i] = nullptr;
-            //else
-            //{
             pieces[i] = move.pieces[i];
             move.pieces[i] = nullptr;
-            //}
-
         }
     }
 
@@ -257,8 +251,6 @@ public:
             if (pieces[i] != nullptr)
                 res += pieces[i]->price(i / 8) * pieces[i]->occupancy();
         }
-        //wcout<<res<<endl;
-        //print();
 
         return res;
     }
@@ -286,21 +278,12 @@ public:
 
     double bestPositionScore(int_fast8_t depth, char onMove, double valueSoFar, double alpha, double beta)
     {
-        //if (depth == 0)
-            //return valueSoFar;
+        if (itsTimeToStop)
+            return 0;
+
+
         double bestValue = INT32_MAX * onMove * (-1);
         double totalValues = 0;
-        //wcout << endl;
-        //print();
-        //if (depth == depthW)
-        //{
-        //    //wcout << endl;
-        //}
-
-
-
-        if (itsTimeToStop)
-            return 0;//mozna?
 
 
         uint_fast16_t totalMoves = 0;
@@ -339,11 +322,8 @@ public:
 
         if ((int)bestValue == INT32_MAX * onMove * (-1))//Nemůžu udělat žádný legitimní tah (pat nebo mat)
         {
-            //print();
-            //wcout << endl;
             if ((int)(bestPositionScore(1, onMove * (-1),valueSoFar, alpha, beta) * onMove * (-1)) == kingPrice)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
             {
-                //print();
                 bestValue = -100000 * depth * onMove;//Dostanu mat, co nejnižší skóre
             }
 
@@ -358,38 +338,7 @@ public:
         }
 
 
-        //if(depth==1)
-            //bestValue+=((totalMoves*onMove)/1000.0);
-
-
-        //if (depthW != depth)//sude hloubky hraje PC, liche souper. DepthW je depth na zacatku, to hraje souper, tah PC neni ohodnocen, takze by bylo nefer ohodnotit souperuv
-        //{
-        //    double avgValue = totalValues / totalMoves;
-        //    //if (avgValue != 0)
-        //   // {
-        //    //    int a = 4;
-        //    //}
-        //    avgValue /= 1000.0;
-        //    avgValue = max(min(avgValue, 0.01), -0.01);
-        //    //bestValue += avgValue;
-
-        //    //Vesti cislo depth znamena ze nejsem jiz tak hluboko (tahy nastanou drive)
-        //    int_fast8_t howFarFromInitial = (depthW - depth);
-        //    int_fast8_t howFarFromInitialAfterExchange = ((howFarFromInitial + 1) >> 1);//Kolikaty tah od initial pozice (od 0), ne pultah
-        //    //bestValue -= onMove*(howFarFromInitialAfterExchange / 1000.0);//Pozdejsi tahy maji nizsi vahu, nevidim tam tolik dopredu co muze nasledovat - penalizovat hloubku a uprednostnovat co nejrychleji se dostat do vyhody, ale idealne aby se pouzilo v prioritě až nakonec, když je lepší tah tak si na něj počkám. Lepší počítat půltahy, přece jenom je to půtah informace navíc, může rozhodnout výměny např. dámy atd
-
-        //    //Cil pokryt co nejvic poli, cim pozdeji tim lip. Napadena pole se pocitaji za vicenasobek, viz metoda u Piece
-        //    //if(depth<=2)//Zajimaji me pouze finální pozice, než k nim dojdu může být pozice klidně špatná jak chce (to že si je méně jistý koriguje druhý odečet). Omezení na hloubku 2 taky velmi zrychli program kvuli aplha/beta prorezavani.
-        //      //  bestValue += onMove*(totalMoves / 100000.0);//Cim vice moves, tim vetsi vyhoda. Konstanta je zvolená odhadem, těžko říct jakou zvolit
-        //    //bestValue += onMove * (totalMoves / (1000.0 * (howFarFromInitialAfterExchange + 1)));
-        //}
-
-        //wcout<<"moves"<<totalMoves<<endl;
-        //print();
-
-
-        //doneMoves.emplace(board.printBasic(),bestValue);
-        return bestValue;//+((totalMoves*onMove)/(1000.0*depth));
+        return bestValue;
     }
 
     
@@ -409,7 +358,7 @@ public:
     {
         Piece* backup = pieceAt(column, row);
         setPieceAt(column, row, p);
-        auto foundVal = positionScore();//bestPositionScore(depth, occupancyToTry, valueSoFar, alpha, beta);
+        auto foundVal = positionScore();
         setPieceAt(column, row, backup);
         return foundVal;
     }
@@ -498,29 +447,6 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
         {
             double foundOnly = board.tryPiece(column, row, changeInto, depth, occupancy() * (-1), alpha, beta, valueWithThisPiece);
 
-            //if (foundOnly > 100 || foundOnly < -100)
-              //  wcout << foundOnly<<endl;
-
-            //
-            //if ((int)foundOnly == INT32_MAX*occupancy())//Soupeř nemůže udělat žádný legitimní tah (pat nebo mat)
-            //{
-            //    //print();
-            //    if ((int)(board.tryPiece(column, row, changeInto, depth, occupancy(), alpha, beta, valueWithThisPiece) * occupancy()) == kingPrice)//Můžu soupeřovi vzít krále
-            //    {
-            //        //print();
-            //        foundVal = 100000 * depth * occupancy();//Dávám mat, co nejvyšší skóre
-            //    }
-
-            //    else
-            //    {//Dostal bych pat, ten je vždycky lepší než dostat mat, ale chci ho docílit jen když prohrávám
-            //        if (valueWithThisPiece * occupancy() > 0)
-            //            foundVal = -500 * depth * occupancy();//Vedu, nechci dostat remízu
-            //        else
-            //            foundVal = 500 * depth * occupancy();//Prohrávám nebo nastejno, dát remízu beru jako super tah
-            //    }
-            //
-            //}
-
 
             foundVal = foundOnly;
 
@@ -528,13 +454,8 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
             {
                 //if (foundVal > 0)
                 totalMoves -= 1;
-                //totalValues -= foundVal;
-                //else
-                  //  totalMoves-=1;
                 return;
             }
-            //else if (price > 0)
-              //  totalMoves += 4;
         }
         else//konec tady, list
         {
@@ -543,7 +464,6 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
                 foundVal+=board.tryPiecePosition(column, row, changeInto);
         }
 
-        //totalValues += foundVal;
 
         if (foundVal * occupancy() > bestValue * occupancy())
             bestValue = foundVal;
@@ -563,24 +483,11 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
               //  doNotContinue = true;
         }
 
-       // if (doNotContinue)
-         //   return;
-        
+
         if (beta <= alpha)
         {
-            //bestValue=INT32_MAX*occupancy()*(-1);
             doNotContinue = true;
-            //return;
         }
-
-
-        //if(totalMoves>0&&beta<=alpha)
-          //  doNotContinue=true;
-
-
-
-
-
     }
 }
 
@@ -631,19 +538,18 @@ struct Pawn : public Piece {
 
             for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
 
-                tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar,(*availableOptions)[i], 0, 0);
+                tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar,(*availableOptions)[i], 0, 0);
                 if (canGoTwoFields(row))
-                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar, (*availableOptions)[i], 0, 0);
+                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, (*availableOptions)[i], 0, 0);
 
             }
         }
         for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
-            tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar, (*availableOptions)[i], DBL_MIN);
-            tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar, (*availableOptions)[i], DBL_MIN);
+            tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, (*availableOptions)[i], DBL_MIN);
+            tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, (*availableOptions)[i], DBL_MIN);
         }
         board.setPieceAt(column, row, this);
 
-        totalMoves += moves;
 
         return bestValue;
     }
@@ -657,26 +563,20 @@ struct Knight : public Piece {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
 
-        uint_fast16_t moves = 0;
-
         //if (depth <= 0)
           //  return 0;
         board.setPieceAt(column, row, nullptr);
 
-        //bool foundKing = false;
-
-        tryChangeAndUpdateIfBetter(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
         board.setPieceAt(column, row, this);
-
-        totalMoves += moves;
 
         return bestValue;
     }
@@ -695,8 +595,6 @@ struct Bishop : public Piece {
         //if (depth <= 0)
           //  return 0;
 
-        uint_fast16_t moves = 0;
-
         board.setPieceAt(column, row, nullptr);
         //bool foundKing = false;
 
@@ -704,7 +602,7 @@ struct Bishop : public Piece {
             double price = board.priceInLocation(column + i, row + i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -715,7 +613,7 @@ struct Bishop : public Piece {
             double price = board.priceInLocation(column + i, row - i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -726,7 +624,7 @@ struct Bishop : public Piece {
             double price = board.priceInLocation(column - i, row + i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -737,7 +635,7 @@ struct Bishop : public Piece {
             double price = board.priceInLocation(column - i, row - i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -748,7 +646,6 @@ struct Bishop : public Piece {
 
         board.setPieceAt(column, row, this);
 
-        totalMoves += moves;
 
         return bestValue;
     }
@@ -765,21 +662,13 @@ struct Rook : public Piece {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
 
-        uint_fast16_t moves = 0;
-
-        //if (depth <= 0)
-          //  return 0;
-        //int_fast8_t totalMoves = 0;
-
         board.setPieceAt(column, row, nullptr);
-
-        //bool foundKing = false;
 
         for (char i = 1; i < 8; ++i) {
             double price = board.priceInLocation(column, row + i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -790,7 +679,7 @@ struct Rook : public Piece {
             double price = board.priceInLocation(column, row - i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -801,7 +690,7 @@ struct Rook : public Piece {
             double price = board.priceInLocation(column + i, row, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -812,7 +701,7 @@ struct Rook : public Piece {
             double price = board.priceInLocation(column - i, row, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -822,8 +711,6 @@ struct Rook : public Piece {
 
 
         board.setPieceAt(column, row, this);
-
-        totalMoves += moves;
 
         return bestValue;
     }
@@ -842,23 +729,17 @@ struct Queen : public Piece {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
 
-        uint_fast16_t moves = 0;
-
-        // if (depth <= 0)
-          //   return 0;
-
 
         Piece* originalPiece = board.pieceAt(column, row);
         board.setPieceAt(column, row, nullptr);
 
-        //bool foundKing = false;
 
 
         for (char i = 1; i < 8; ++i) {
             double price = board.priceInLocation(column + i, row + i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -869,7 +750,7 @@ struct Queen : public Piece {
             double price = board.priceInLocation(column + i, row - i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -880,7 +761,7 @@ struct Queen : public Piece {
             double price = board.priceInLocation(column - i, row + i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -891,7 +772,7 @@ struct Queen : public Piece {
             double price = board.priceInLocation(column - i, row - i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -903,7 +784,7 @@ struct Queen : public Piece {
             double price = board.priceInLocation(column, row + i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -914,7 +795,7 @@ struct Queen : public Piece {
             double price = board.priceInLocation(column, row - i, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -925,7 +806,7 @@ struct Queen : public Piece {
             double price = board.priceInLocation(column + i, row, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -939,7 +820,7 @@ struct Queen : public Piece {
             double price = board.priceInLocation(column - i, row, occupancy());
             if (price >= 0)
             {
-                tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+                tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
                 if (price > 0)
                     break;
             }
@@ -949,7 +830,6 @@ struct Queen : public Piece {
 
         board.setPieceAt(column, row, this);
 
-        totalMoves += moves;
 
         return bestValue;
     }
@@ -964,25 +844,19 @@ struct King : public Piece {
     virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         double bestValue = INT32_MAX * (-1) * occupancy();
 
-        uint_fast16_t moves = 0;
-        //  if (depth <= 0)
-          //    return 0;
-        //bool foundKing = false;
-
         board.setPieceAt(column, row, nullptr);
 
-        tryChangeAndUpdateIfBetter(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalValues, moves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryChangeAndUpdateIfBetter(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
         board.setPieceAt(column, row, this);
 
-        totalMoves += moves;
         return bestValue;
 
     }
@@ -1254,130 +1128,8 @@ vector<Piece*>* PawnBlack::evolveIntoReference(char row) const {
 }
 
 
-/*
-struct BoardDerivative{
-    BoardDerivative(Board board, Board * original, int price, int depth, char onMove):board(board),original(original),price(price),depth(depth),onMove(onMove){}
-
-    Board board;
-    Board* original;
-    int price;
-    int depth;
-    char onMove;
-
-    friend bool operator<(const BoardDerivative& l, const BoardDerivative& r)
-    {
-        return l.price-l.depth < r.price-r.depth;
-    }
-};*/
-
-//map<string,double> doneMoves;
-/*
-double findBestOn(Board & board, int depth, char onMove)
-{
-    if(depth==0)
-        return 0;
-
-
-    double bestValue = INT32_MAX*(-1)*onMove;
-    int totalMoves = 0;
-
-    //vector<pair<Board,int>> firstMoves;
-    for (char j = '1'; j <= '8'; ++j) {
-        for (char i = 'a'; i <= 'h'; ++i) {
-            Piece *found = board.pieceAt(i, j);
-            if (found->occupancy() == onMove)
-            {
-                auto possibleMoves = found->availablePositions(board, i, j);
-                totalMoves+=possibleMoves.size();
-
-
-                for (int k = 0; k < possibleMoves.size(); ++k) {
-                    if(possibleMoves[k].second==kingPrice)//Je možné vzít krále
-                    {
-                        return (possibleMoves[k].second*depth)*onMove;
-                    }
-                    double foundOnly = 0;
-                    if(depth>1)
-                    {
-                        foundOnly = findBestOn(possibleMoves[k].first,depth-1,onMove*(-1));
-                        if((int)foundOnly*onMove*(-1)==kingPrice*(depth-1))//V dalším tahu bych přišel o krále, není to legitimní tah
-                        {
-                            totalMoves--;
-                        }
-                    }
-
-                    //double foundOnly = findBestOn(possibleMoves[k].first,depth-1,onMove*(-1));
-
-                    //if(depth>1&&(int)foundOnly*onMove*(-1)==kingPrice*(depth-1))//V dalším tahu bych přišel o krále, není to legitimní tah
-                    //{
-                    //    totalMoves--;
-                    //}
-
-                    double foundVal = foundOnly+possibleMoves[k].second*onMove;
-                    if (foundVal*onMove>bestValue*onMove)
-                        bestValue=foundVal;
-                }
-
-                //firstMoves.insert(firstMoves.end(),possibleMoves.begin(),possibleMoves.end());
-            }
-        }
-
-        //wcout<<depth<<endl;
-    }
-    if(totalMoves==0)//Nemůžu udělat žádný legitimní tah (pat nebo mat)
-    {
-        if(findBestOn(board,1,onMove*(-1))*onMove*(-1)==kingPrice)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
-            return -1000*onMove*depth;//Dostanu mat, co nejnižší skóre
-        else
-        {//Dostal bych pat, ten je vždycky lepší než dostat mat, ale chci ho docílit jen když prohrávám
-            if(board.balance()*onMove>0)//Vedu
-                return -500*onMove;
-            else
-                return 500*onMove;//Prohrávám nebo nastejno
-        }
-
-        return 0;
-    }
-
-
-    //doneMoves.emplace(board.printBasic(),bestValue);
-    return bestValue+(totalMoves*onMove)/(1000.0*depth);
-}*/
-
-
-
-
 
 atomic<double> alphaOrBeta;
-/*
-class ToProcessQueue
-{
-    std::mutex m;
-    std::queue<pair<double*, Board>> q;
-    condition_variable cv_empty;
-public:
-    void push(pair<double*, Board>&& item)
-    {
-        unique_lock<mutex> ul(m);
-        q.push(move(item));
-        cv_empty.notify_one();
-    }
-    void push(pair<double*, Board>& item)
-    {
-        unique_lock<mutex> ul(m);
-        q.push(item);
-        cv_empty.notify_one();
-    }
-    pair<double*, Board> pop()
-    {
-        unique_lock<mutex> ul(m);
-        cv_empty.wait(ul, [this]() { return (!q.empty()); });
-        auto res = q.front();
-        q.pop();
-        return res;
-    }
-
-};*/
 
 
 class ToProcessQueue
@@ -1391,13 +1143,7 @@ public:
         unique_lock<mutex> ul(m);
         q.push(move(item));
         cv_empty.notify_one();
-    }/*
-    void push(BoardWithValues& item)
-    {
-        unique_lock<mutex> ul(m);
-        q.push(item);
-        cv_empty.notify_one();
-    }*/
+    }
     BoardWithValues* pop()
     {
         unique_lock<mutex> ul(m);
@@ -1418,15 +1164,12 @@ void findOutArgument(BoardWithValues* board, int_fast8_t depth, char onMove)//, 
     if (onMove > 0)
     {
         board->bestFoundValue= toDestroy.bestPositionScore(depth, onMove, board->pieceTakenValue, alphaOrBeta, DBL_MAX);
-        //double result = 
         alphaOrBeta = max(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
-        //*res = result;
     }
     else
     {
         board->bestFoundValue = toDestroy.bestPositionScore(depth, onMove,board->pieceTakenValue, -DBL_MAX, alphaOrBeta);
         alphaOrBeta = min(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
-        //*res = result;
     }
 
 
@@ -1472,21 +1215,19 @@ pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fas
     if (onMove < 0)
     {
         for (auto it = boards.rbegin(); it != boards.rend(); it++) {
-            q.push( &(*it) );// { &it->first,it->second }
+            q.push( &(*it) );
         }
     }
     else
     {
         for (auto& board : boards) {
-            q.push(&board);//{ &board.first,board.second });
+            q.push(&board);
         }
     }
 
 
-    //double stopper = -DBL_MAX;
-
     for (int i = 0; i < threadCount; ++i) {
-        q.push(&stopper);// { &stopper, Board() });
+        q.push(&stopper);
     }
 
     for (int i = 0; i < threads.size(); ++i) {
@@ -1739,7 +1480,6 @@ void playGameResponding(Board board, char onMove)
     {
         auto start = chrono::high_resolution_clock::now();
         //doneMoves.clear();
-        //auto result = findBestOnTopLevel(board,depth,onMove);
         auto result = findBestInTimeLimit(board, onMove, milliseconds);
         //auto result = findBestInNumberOfMoves(board, onMove, 8);
         auto end = chrono::high_resolution_clock::now();
@@ -1753,11 +1493,10 @@ void playGameResponding(Board board, char onMove)
     }
 }
 
+
 int main() {
     std::wcout.sync_with_stdio(false);
     init_locale();
-
-
 
     Board initialGreedyCheckmate(startingPosition());
     initialGreedyCheckmate.deleteAndMovePiece('f', '1', 'c', '6');
