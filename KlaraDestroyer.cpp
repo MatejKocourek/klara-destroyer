@@ -240,16 +240,16 @@ public:
         wcout << endl;
     }
 
-    /*
-        string printBasic() const
-        {
-            string res;
-            for (int i = 0; i < 64; ++i) {
-                res+=pieces[i]->printBasic();
-            }
-            return res;
+    
+    string printBasic() const
+    {
+        string res;
+        for (uint_fast8_t i = 0; i < 64; ++i) {
+            res += pieces[i]->printBasic();
         }
-    */
+        return res;
+    }
+    
     double balance() const {
         double res = 0;
         for (int i = 0; i < 64; ++i) {
@@ -345,9 +345,6 @@ public:
 
         return bestValue;
     }
-
-    
-
 
 
     double tryPiece(char column, char row, Piece* p, int_fast8_t depth, int_fast8_t occupancyToTry, double alpha, double beta, double valueSoFar)
@@ -513,27 +510,7 @@ struct Pawn : public Piece {
 
         uint_fast16_t moves = 0;
 
-
-        //if (depth <= 0)
-          //  return 0;
-
         auto availableOptions = evolveIntoReference(row + advanceRow());
-
-
-        //double rowAdvantage = 0;
-        //if(availableOptions.size()==1)
-        //{
-            //rowAdvantage = (6-abs(row-evolveRow()))/128.0;
-            /*
-            bool allLineClear = true;
-            for (char i = row; i != evolveRow(); i+=advanceRow()) {
-                if(board.priceInLocation(column,i,0)!=0)
-                {
-                    allLineClear=false;
-
-                }
-            }*/
-            // }
 
 
         board.setPieceAt(column, row, nullptr);
@@ -818,8 +795,6 @@ struct Queen : public Piece {
             else
                 break;
         }
-
-
 
         for (char i = 1; i < 8; ++i) {
             double price = board.priceInLocation(column - i, row, occupancy());
@@ -1241,18 +1216,16 @@ pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fas
 
     std::stable_sort(boards.begin(), boards.end());
 
-    if (!itsTimeToStop)
-    {
-        for (int i = 0; i < boards.size(); ++i) {
-            wcout << boards[i].bestFoundValue << endl;
-            wcout << boards[i].pieceTakenValue << endl;
-            boards[i].board.print();
-        }
-        wcout << endl << endl;
-    }
+    //if (!itsTimeToStop)
+    //{
+    //    for (int i = 0; i < boards.size(); ++i) {
+    //        wcout << boards[i].bestFoundValue << endl;
+    //        wcout << boards[i].pieceTakenValue << endl;
+    //        boards[i].board.print();
+    //    }
+    //    wcout << endl << endl;
+    //}
     
-
-
     if (onMove == 1)
     {
         return { boards[0].board,boards[0].bestFoundValue };
@@ -1420,13 +1393,6 @@ long long boardUserInput(Board& board)
     cin >> tmp;
     auto endHuman = chrono::high_resolution_clock::now();
 
-    //char columnOrig,rowOrig,columnTo,rowTo;
-//cin>>columnOrig;
-//cin>>rowOrig;
-//cin>>columnTo;
-//cin>>rowTo;
-
-//initial.movePiece(columnOrig,rowOrig,columnTo,rowTo);
 
     while (true)
     {
@@ -1531,284 +1497,10 @@ int main() {
     std::wcout.sync_with_stdio(false);
     init_locale();
 
-    Board initialGreedyCheckmate(startingPosition());
-    initialGreedyCheckmate.deleteAndMovePiece('f', '1', 'c', '6');
-    initialGreedyCheckmate.deleteAndMovePiece('e', '2', 'e', '3');
-    initialGreedyCheckmate.deleteAndMovePiece('d', '7', 'd', '6');
-
-
-    Board endgame;
-    endgame.deleteAndOverwritePiece('a', '4', new PawnWhite());
-    endgame.deleteAndOverwritePiece('d', '4', new PawnWhite());
-    endgame.deleteAndOverwritePiece('g', '3', new QueenBlack());
-    endgame.deleteAndOverwritePiece('b', '5', new BishopBlack());
-    endgame.deleteAndOverwritePiece('d', '5', new PawnBlack());
-    endgame.deleteAndOverwritePiece('b', '6', new PawnBlack());
-    endgame.deleteAndOverwritePiece('a', '7', new PawnBlack());
-    endgame.deleteAndOverwritePiece('c', '7', new PawnBlack());
-    endgame.deleteAndOverwritePiece('f', '5', new KingWhite());
-    endgame.deleteAndOverwritePiece('e', '6', new PawnWhite());
-    endgame.deleteAndOverwritePiece('e', '7', new KingBlack());
-    endgame.deleteAndOverwritePiece('g', '7', new PawnBlack());
-    endgame.deleteAndOverwritePiece('h', '8', new RookBlack());
-
-    Board endgame2;
-    endgame2.deleteAndOverwritePiece('a', '3', new PawnWhite());
-    endgame2.deleteAndOverwritePiece('c', '3', new PawnWhite());
-    endgame2.deleteAndOverwritePiece('d', '4', new PawnWhite());
-    endgame2.deleteAndOverwritePiece('e', '5', new PawnWhite());
-    endgame2.deleteAndOverwritePiece('d', '5', new PawnBlack());
-
-    endgame2.deleteAndOverwritePiece('h', '3', new PawnBlack());
-
-    endgame2.deleteAndOverwritePiece('b', '6', new PawnBlack());
-    endgame2.deleteAndOverwritePiece('a', '7', new PawnBlack());
-    endgame2.deleteAndOverwritePiece('c', '7', new PawnBlack());
-
-
-    endgame2.deleteAndOverwritePiece('b', '5', new BishopBlack());
-
-    endgame2.deleteAndOverwritePiece('f', '2', new KingWhite());
-
-    endgame2.deleteAndOverwritePiece('e', '7', new KingBlack());
-    endgame2.deleteAndOverwritePiece('g', '7', new PawnBlack());
-    endgame2.deleteAndOverwritePiece('h', '8', new RookBlack());
-
-
-    Board endGameMatousPc;
-    endGameMatousPc.deleteAndOverwritePiece('b', '8', new KnightBlack());
-    endGameMatousPc.deleteAndOverwritePiece('f', '8', new KingBlack());
-    endGameMatousPc.deleteAndOverwritePiece('g', '8', new KnightBlack());
-    endGameMatousPc.deleteAndOverwritePiece('g', '7', new RookWhite());
-    endGameMatousPc.deleteAndOverwritePiece('b', '5', new PawnWhite());
-    endGameMatousPc.deleteAndOverwritePiece('d', '5', new KingWhite());
-    endGameMatousPc.deleteAndOverwritePiece('h', '5', new PawnBlack());
-    endGameMatousPc.deleteAndOverwritePiece('h', '4', new PawnWhite());
-    endGameMatousPc.deleteAndOverwritePiece('c', '2', new PawnWhite());
-    endGameMatousPc.deleteAndOverwritePiece('g', '2', new PawnWhite());
-    endGameMatousPc.deleteAndOverwritePiece('h', '2', new BishopBlack());
-
-
-    Board endGameMatousPc2;
-    endGameMatousPc2.deleteAndOverwritePiece('f', '8', new BishopBlack());
-    endGameMatousPc2.deleteAndOverwritePiece('e', '6', new KingWhite());
-    endGameMatousPc2.deleteAndOverwritePiece('h', '3', new RookWhite());
-    endGameMatousPc2.deleteAndOverwritePiece('e', '1', new KingBlack());
-    endGameMatousPc2.deleteAndOverwritePiece('c', '2', new PawnWhite());
-    endGameMatousPc2.deleteAndOverwritePiece('g', '2', new PawnWhite());
-
-    Board endGameMatousPc3;
-    endGameMatousPc3.deleteAndOverwritePiece('d', '6', new BishopBlack());
-    endGameMatousPc3.deleteAndOverwritePiece('e', '6', new KingWhite());
-    endGameMatousPc3.deleteAndOverwritePiece('h', '1', new RookWhite());
-    endGameMatousPc3.deleteAndOverwritePiece('d', '2', new KingBlack());
-    endGameMatousPc3.deleteAndOverwritePiece('c', '5', new PawnWhite());
-    endGameMatousPc3.deleteAndOverwritePiece('h', '8', new QueenWhite());
-
-
-    Board puzzle1;
-    puzzle1.deleteAndOverwritePiece('b', '2', new RookBlack());
-    puzzle1.deleteAndOverwritePiece('b', '4', new PawnWhite());
-    puzzle1.deleteAndOverwritePiece('c', '5', new BishopWhite());
-    puzzle1.deleteAndOverwritePiece('d', '1', new KingWhite());
-    puzzle1.deleteAndOverwritePiece('d', '3', new BishopWhite());
-    puzzle1.deleteAndOverwritePiece('d', '5', new PawnWhite());
-    puzzle1.deleteAndOverwritePiece('d', '7', new PawnWhite());
-    puzzle1.deleteAndOverwritePiece('f', '2', new PawnBlack());
-    puzzle1.deleteAndOverwritePiece('f', '6', new BishopBlack());
-    puzzle1.deleteAndOverwritePiece('f', '7', new KingBlack());
-
-
-
-    Board klaraHra;
-    klaraHra.deleteAndOverwritePiece('a', '7', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('b', '6', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('c', '5', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('d', '5', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('e', '6', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('f', '7', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('g', '6', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('h', '7', new PawnBlack());
-    klaraHra.deleteAndOverwritePiece('g', '8', new KingBlack());
-    klaraHra.deleteAndOverwritePiece('f', '8', new RookBlack());
-    klaraHra.deleteAndOverwritePiece('a', '8', new RookBlack());
-    klaraHra.deleteAndOverwritePiece('d', '7', new QueenBlack());
-    klaraHra.deleteAndOverwritePiece('c', '6', new KnightBlack());
-    klaraHra.deleteAndOverwritePiece('d', '4', new KnightBlack());
-    klaraHra.deleteAndOverwritePiece('e', '5', new BishopBlack());
-
-    klaraHra.deleteAndOverwritePiece('a', '2', new PawnWhite());
-    klaraHra.deleteAndOverwritePiece('b', '2', new PawnWhite());
-    klaraHra.deleteAndOverwritePiece('c', '2', new PawnWhite());
-    klaraHra.deleteAndOverwritePiece('d', '3', new PawnWhite());
-    klaraHra.deleteAndOverwritePiece('f', '2', new PawnWhite());
-    klaraHra.deleteAndOverwritePiece('g', '4', new PawnWhite());
-    klaraHra.deleteAndOverwritePiece('h', '2', new PawnWhite());
-    klaraHra.deleteAndOverwritePiece('a', '4', new QueenWhite());
-    klaraHra.deleteAndOverwritePiece('c', '3', new KnightWhite());
-    klaraHra.deleteAndOverwritePiece('f', '3', new KnightWhite());
-    klaraHra.deleteAndOverwritePiece('a', '1', new RookWhite());
-    klaraHra.deleteAndOverwritePiece('h', '1', new RookWhite());
-    klaraHra.deleteAndOverwritePiece('e', '2', new KingWhite());
-    klaraHra.deleteAndOverwritePiece('g', '5', new BishopWhite());
-
-
-
-    Board klaraHra2;
-    klaraHra2.deleteAndOverwritePiece('a', '7', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('b', '6', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('c', '5', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('d', '4', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('e', '6', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('f', '7', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('g', '6', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('h', '7', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('f', '7', new PawnBlack());
-    klaraHra2.deleteAndOverwritePiece('g', '7', new KingBlack());
-    klaraHra2.deleteAndOverwritePiece('d', '8', new RookBlack());
-    klaraHra2.deleteAndOverwritePiece('a', '8', new RookBlack());
-    klaraHra2.deleteAndOverwritePiece('d', '7', new QueenBlack());
-    klaraHra2.deleteAndOverwritePiece('c', '6', new KnightBlack());
-
-
-    klaraHra2.deleteAndOverwritePiece('a', '2', new PawnWhite());
-    klaraHra2.deleteAndOverwritePiece('c', '2', new PawnWhite());
-    klaraHra2.deleteAndOverwritePiece('d', '3', new PawnWhite());
-    klaraHra2.deleteAndOverwritePiece('f', '2', new PawnWhite());
-    klaraHra2.deleteAndOverwritePiece('g', '5', new PawnWhite());
-    klaraHra2.deleteAndOverwritePiece('h', '2', new PawnWhite());
-    klaraHra2.deleteAndOverwritePiece('a', '4', new QueenWhite());
-    klaraHra2.deleteAndOverwritePiece('b', '1', new RookWhite());
-    klaraHra2.deleteAndOverwritePiece('h', '1', new RookWhite());
-    klaraHra2.deleteAndOverwritePiece('g', '2', new KingWhite());
-    //initial.deleteAndOverwritePiece('d','5',new PawnBlack());
-    //initial.deleteAndOverwritePiece('d','8',new QueenBlack());
-
-
-    Board klaraHra3;
-    klaraHra3.deleteAndOverwritePiece('h', '7', new PawnBlack());
-    klaraHra3.deleteAndOverwritePiece('g', '6', new PawnBlack());
-    klaraHra3.deleteAndOverwritePiece('g', '5', new PawnBlack());
-    klaraHra3.deleteAndOverwritePiece('h', '8', new KingBlack());
-    klaraHra3.deleteAndOverwritePiece('f', '8', new RookBlack());
-    klaraHra3.deleteAndOverwritePiece('a', '4', new RookBlack());
-    klaraHra3.deleteAndOverwritePiece('d', '1', new QueenBlack());
-
-    klaraHra3.deleteAndOverwritePiece('h', '6', new PawnWhite());
-    klaraHra3.deleteAndOverwritePiece('g', '3', new KingWhite());
-    klaraHra3.deleteAndOverwritePiece('c', '2', new RookWhite());
-
-
-
-    Board testMatu;
-    testMatu.deleteAndOverwritePiece('h', '8', new KingBlack());
-    testMatu.deleteAndOverwritePiece('a', '1', new KingWhite());
-    testMatu.deleteAndOverwritePiece('g', '1', new RookWhite());
-    testMatu.deleteAndOverwritePiece('a', '7', new RookWhite());
-    testMatu.deleteAndOverwritePiece('b', '1', new QueenWhite());
-    testMatu.deleteAndOverwritePiece('c', '7', new PawnWhite());
-
-    Board testMatuDama;
-    testMatuDama.deleteAndOverwritePiece('h', '8', new KingBlack());
-    testMatuDama.deleteAndOverwritePiece('e', '8', new KingWhite());
-    testMatuDama.deleteAndOverwritePiece('b', '1', new QueenWhite());
-
-
-    Board testMatu2;
-    testMatu2.setPieceAt('a', '8', new RookBlack());
-    testMatu2.setPieceAt('e', '8', new KingBlack());
-    testMatu2.setPieceAt('e', '8', new KingBlack());
-    testMatu2.setPieceAt('c', '7', new PawnBlack());
-    testMatu2.setPieceAt('e', '7', new KnightBlack());
-    testMatu2.setPieceAt('f', '7', new PawnBlack());
-    testMatu2.setPieceAt('g', '7', new PawnBlack());
-    testMatu2.setPieceAt('a', '6', new PawnBlack());
-    testMatu2.setPieceAt('a', '5', new PawnWhite());
-    testMatu2.setPieceAt('d', '5', new PawnBlack());
-    testMatu2.setPieceAt('e', '5', new KingWhite());
-    testMatu2.setPieceAt('f', '5', new BishopBlack());
-    testMatu2.setPieceAt('c', '4', new PawnBlack());
-    testMatu2.setPieceAt('h', '2', new RookBlack());
-
-
-    Board initial;
-
-    initial.deleteAndOverwritePiece('a', '1', new RookWhite());
-    initial.deleteAndOverwritePiece('b', '3', new KnightWhite());
-    //initial.deleteAndOverwritePiece('c', '1', new BishopWhite());
-    initial.deleteAndOverwritePiece('d', '1', new QueenWhite());
-    initial.deleteAndOverwritePiece('e', '2', new KingWhite());
-    initial.deleteAndOverwritePiece('f', '1', new BishopWhite());
-    initial.deleteAndOverwritePiece('f', '3', new KnightWhite());
-    initial.deleteAndOverwritePiece('h', '1', new RookWhite());
-
-    initial.deleteAndOverwritePiece('a', '3', new PawnWhite());
-    initial.deleteAndOverwritePiece('b', '4', new PawnWhite());
-    initial.deleteAndOverwritePiece('c', '4', new PawnWhite());
-    initial.deleteAndOverwritePiece('c', '5', new PawnWhite());
-    initial.deleteAndOverwritePiece('e', '3', new PawnWhite());
-    initial.deleteAndOverwritePiece('f', '2', new PawnWhite());
-    initial.deleteAndOverwritePiece('g', '2', new PawnWhite());
-    initial.deleteAndOverwritePiece('h', '2', new PawnWhite());
-
-    initial.deleteAndOverwritePiece('a', '8', new RookBlack());
-    initial.deleteAndOverwritePiece('b', '8', new KnightBlack());
-    initial.deleteAndOverwritePiece('c', '8', new BishopBlack());
-    initial.deleteAndOverwritePiece('b', '2', new QueenBlack());
-    initial.deleteAndOverwritePiece('e', '8', new KingBlack());
-    //initial.deleteAndOverwritePiece('f', '8', new BishopBlack());
-    initial.deleteAndOverwritePiece('e', '7', new KnightBlack());
-    initial.deleteAndOverwritePiece('h', '8', new RookBlack());
-    //initial.deleteAndOverwritePiece('h', '7', new RookWhite());
-
-    initial.deleteAndOverwritePiece('a', '7', new PawnBlack());
-    initial.deleteAndOverwritePiece('b', '7', new PawnBlack());
-    //initial.deleteAndOverwritePiece('c', '7', new PawnBlack());
-    initial.deleteAndOverwritePiece('d', '7', new PawnBlack());
-    initial.deleteAndOverwritePiece('e', '6', new PawnBlack());
-    initial.deleteAndOverwritePiece('f', '7', new PawnBlack());
-    initial.deleteAndOverwritePiece('g', '7', new PawnBlack());
-    initial.deleteAndOverwritePiece('h', '5', new PawnBlack());
-
-    Board lossOfQueenPossible;
-    lossOfQueenPossible.deleteAndOverwritePiece('a', '1', new RookWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('e', '1', new KingWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('h', '1', new RookWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('b', '2', new PawnWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('f', '2', new PawnWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('h', '2', new PawnWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('c', '3', new KnightWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('d', '3', new PawnWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('f', '3', new QueenWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('c', '4', new PawnWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('b', '5', new PawnWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('d', '5', new PawnWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('f', '5', new BishopWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('h', '4', new KnightWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('h', '6', new BishopWhite());
-    lossOfQueenPossible.deleteAndOverwritePiece('a', '5', new PawnBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('a', '7', new RookBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('c', '8', new BishopBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('d', '7', new KnightBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('e', '8', new QueenBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('f', '7', new KingBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('f', '8', new BishopBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('h', '8', new RookBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('g', '6', new PawnBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('h', '7', new PawnBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('e', '7', new PawnBlack());
-    lossOfQueenPossible.deleteAndOverwritePiece('c', '7', new PawnBlack());
-
-    Board checkTest(startingPosition());
-    checkTest.deleteAndOverwritePiece('a', '4',new BishopWhite());
-    checkTest.deleteAndOverwritePiece('e', '6', new QueenWhite());
-    checkTest.deleteAndOverwritePiece('f', '7', nullptr);
-
-    //klaraHra.bestPosition(6,1);
-    //playGameResponding(startingPosition(), -1);
-    //benchmark();
-    //playGameResponding(endgame2, 1);
-    benchmark(8, testMatuDama, 1);
+    
+    
+   // playGameResponding(startingPosition(), -1);
+    benchmark(12, startingPosition(), 1);
 
     return 0;
 }
