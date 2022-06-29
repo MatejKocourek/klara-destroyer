@@ -408,6 +408,21 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
         totalMoves += 1;
         
         totalValues += price * occupancy();
+
+        if (saveToVector)
+        {
+            if (changeInto == nullptr)
+                changeInto = this;
+            Piece* backup = board.pieceAt(column, row);
+            board.setPieceAt(column, row, changeInto);
+            firstPositions.emplace_back(board, price * occupancy(), price * occupancy());
+            //firstPositions[firstPositions.size() - 1].board.print();
+            board.setPieceAt(column, row, backup);
+            //firstPositions[firstPositions.size() - 1].board.print();
+            //wcout << endl;
+            return;
+        }
+
         if (doNotContinue)
             return;
 
@@ -416,60 +431,51 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
             doNotContinue = true;
             bestValue = price * occupancy();
             //totalMoves++;
-            return;
+            //return;
+
         }
-
-        if (!(price == 0 || price == -0))
+        else
         {
-            //const int_fast8_t howFarFromInitial = (depthW - depth);
-            const double howFarFromInitialAfterExchange = ((depthW - depth) >> 1);//Kolikaty tah od initial pozice (od 0), ne pultah
-            price /= (1 + howFarFromInitialAfterExchange / 100.0);
-        }
-
-        double foundVal = 0;
-        double valueWithThisPiece = valueSoFar + (price * occupancy());//price * occupancy();
-
-
-        if (changeInto == nullptr)
-            changeInto = this;
-
-
-        if (saveToVector)
-        {
-            Piece* backup = board.pieceAt(column, row);
-            board.setPieceAt(column, row, changeInto);
-            firstPositions.emplace_back(board, price * occupancy(), price * occupancy());
-            board.setPieceAt(column, row, backup);
-            return;
-        }
-
-
-
-        if (depth > 0)
-        {
-            double foundOnly = board.tryPiece(column, row, changeInto, depth, occupancy() * (-1), alpha, beta, valueWithThisPiece);
-
-
-            foundVal = foundOnly;
-
-            if (((int)foundOnly * occupancy() * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
+            if (!(price == 0 || price == -0))
             {
-                //if (foundVal > 0)
-                totalMoves -= 1;
-                return;
+                //const int_fast8_t howFarFromInitial = (depthW - depth);
+                const double howFarFromInitialAfterExchange = ((depthW - depth) >> 1);//Kolikaty tah od initial pozice (od 0), ne pultah
+                price /= (1 + howFarFromInitialAfterExchange / 100.0);
             }
+
+            double foundVal = 0;
+            double valueWithThisPiece = valueSoFar + (price * occupancy());//price * occupancy();
+
+
+            if (changeInto == nullptr)
+                changeInto = this;
+
+
+            if (depth > 0)
+            {
+                double foundOnly = board.tryPiece(column, row, changeInto, depth, occupancy() * (-1), alpha, beta, valueWithThisPiece);
+
+
+                foundVal = foundOnly;
+
+                if (((int)foundOnly * occupancy() * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
+                {
+                    //if (foundVal > 0)
+                    totalMoves -= 1;
+                    return;
+                }
+            }
+            else//konec tady, list
+            {
+                foundVal = valueWithThisPiece;
+                if (evaluateMoves)
+                    foundVal += board.tryPiecePosition(column, row, changeInto);
+            }
+
+
+            if (foundVal * occupancy() > bestValue * occupancy())
+                bestValue = foundVal;
         }
-        else//konec tady, list
-        {
-            foundVal = valueWithThisPiece;
-            if(evaluateMoves)
-                foundVal+=board.tryPiecePosition(column, row, changeInto);
-        }
-
-
-        if (foundVal * occupancy() > bestValue * occupancy())
-            bestValue = foundVal;
-
 
         
         if (occupancy() > 0)//bily, maximalizuje hodnotu
@@ -503,6 +509,21 @@ struct Pawn : public Piece {
     virtual char advanceRow() const = 0;
 
     virtual bool canGoTwoFields(char row) const = 0;
+
+    virtual double priceRelative(int_fast8_t relativeRowDistanceFromStart) const {
+        //return 1;
+        switch (relativeRowDistanceFromStart) {
+        case 5:
+            return 1.5;
+        case 6:
+            return 2;
+        case 7:
+            return 3;
+        default:
+            return 1;
+
+        }
+    }
 
     virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
     {
@@ -1027,18 +1048,19 @@ struct PawnWhite :public Pawn {
 
 
     double price(char row) const override {
-        //return 1;
-        switch (row) {
-        case '5':
-            return 1.5;
-        case '6':
-            return 2;
-        case '7':
-            return 3;
-        default:
-            return 1;
+        return priceRelative(row - '0');
+        ////return 1;
+        //switch (row) {
+        //case '5':
+        //    return 1.5;
+        //case '6':
+        //    return 2;
+        //case '7':
+        //    return 3;
+        //default:
+        //    return 1;
 
-        }
+        //}
     }
     virtual vector<Piece*>* evolveIntoReference(char row) const;
 
@@ -1071,18 +1093,19 @@ struct PawnBlack :public Pawn {
     }
 
     double price(char row) const override {
-        //return 1;
-        switch (row) {
-        case '4':
-            return 1.5;
-        case '3':
-            return 2;
-        case '2':
-            return 3;
-        default:
-            return 1;
+        return priceRelative('9'- row);
+        ////return 1;
+        //switch (row) {
+        //case '4':
+        //    return 1.5;
+        //case '3':
+        //    return 2;
+        //case '2':
+        //    return 3;
+        //default:
+        //    return 1;
 
-        }
+        //}
     }
 
     virtual vector<Piece*>* evolveIntoReference(char row) const;
@@ -1497,10 +1520,18 @@ int main() {
     std::wcout.sync_with_stdio(false);
     init_locale();
 
+    //Board testing = startingPosition();
+    //testing.deleteAndMovePiece('c', '7', 'c', '6');
+    //testing.deleteAndMovePiece('d', '7', 'd', '5');
+    //testing.deleteAndMovePiece('e', '7', 'e', '6');
+    //testing.deleteAndMovePiece('b', '1', 'c', '3');
+    //testing.deleteAndMovePiece('f', '1', 'd', '3');
+    //testing.deleteAndMovePiece('g', '1', 'f', '3');
+    //testing.deleteAndMovePiece('e', '2', 'e', '3');
+    //testing.deleteAndMovePiece('d', '2', 'd', '4');
     
-    
-   // playGameResponding(startingPosition(), -1);
-    benchmark(12, startingPosition(), 1);
+    playGameResponding(startingPosition(), -1);
+    //benchmark(8, testing, 1);
 
     return 0;
 }
