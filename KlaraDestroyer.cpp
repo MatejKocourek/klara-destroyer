@@ -93,7 +93,7 @@ struct Piece {
         return ' ';
     }*/
 
-    virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNotContinue = false) = 0;/*
+    virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNotContinue = false) = 0;/*
     {
         return 0;
     }*/
@@ -171,12 +171,17 @@ public:
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
             return -1;
-        else if (pieces[(column - 'a') + (row - '1') * 8] == nullptr)
+
+        //int_fast8_t index = (column - 'a') + ((row - '1') * 8);
+        int_fast8_t index = -489 + column + (row << 3);
+
+
+        if (pieces[index] == nullptr)
             return 0;
-        else if (pieces[(column - 'a') + (row - '1') * 8]->occupancy() == playerColor)
+        if (pieces[index]->occupancy() == playerColor)
             return -1;
         else
-            return pieces[(column - 'a') + (row - '1') * 8]->price(row);
+            return pieces[index]->price(row);
     }
     Piece* pieceAt(char column, char row)
     {
@@ -272,15 +277,15 @@ public:
     
     double balance() const {
         double res = 0;
-        for (int i = 0; i < 64; ++i) {
+        for (uint_fast8_t i = 0; i < 64; ++i) {
             if (pieces[i] != nullptr)
-                res += pieces[i]->price(i / 8) * pieces[i]->occupancy();
+                res += pieces[i]->price(i >> 3) * pieces[i]->occupancy();
         }
 
         return res;
     }
 
-    double positionScore() {
+    double positionScoreHeuristic() {
         double res = 0;
         for (int_fast8_t i = 0; i < 64; ++i) {
             if (pieces[i] != nullptr)
@@ -290,9 +295,9 @@ public:
                 beta = DBL_MAX;
                 uint_fast16_t totalMoves = 0;
                 double totalValues = 0;
-                pieces[i]->bestPosition(*this, (i & 0b111) + 'a', (i >> 3) + '1', 1, alpha, beta, totalMoves, totalValues, 0,true);
+                pieces[i]->bestMoveWithThisPieceScore(*this, (i & 0b111) + 'a', (i >> 3) + '1', 1, alpha, beta, totalMoves, totalValues, 0,true);
 
-                res += ((double)totalMoves) * pieces[i]->occupancy();
+                res += (((double)totalMoves)/2.0) * pieces[i]->occupancy();
                 if(totalMoves>0)
                     res += min(max(totalValues,-100.0),100.0);
             }
@@ -301,7 +306,7 @@ public:
     }
 
 
-    double bestPositionScore(int_fast8_t depth, char onMove, double valueSoFar, double alpha, double beta)
+    double bestMoveScore(int_fast8_t depth, char onMove, double valueSoFar, double alpha, double beta)
     {
         if (itsTimeToStop)
             return 0;
@@ -321,7 +326,7 @@ public:
                 continue;
             if (found->occupancy() == onMove)
             {
-                auto foundVal = found->bestPosition(*this, (i & 0b111) + 'a', (i >> 3) + '1', depthToPieces, alpha, beta, totalMoves, totalValues, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i & 0b111) + 'a', (i >> 3) + '1', depthToPieces, alpha, beta, totalMoves, totalValues, valueSoFar);
 
                 if (foundVal * onMove > bestValue * onMove) {
                     bestValue = foundVal;
@@ -347,7 +352,7 @@ public:
 
         if ((int)bestValue == INT32_MAX * onMove * (-1))//Nemůžu udělat žádný legitimní tah (pat nebo mat)
         {
-            if ((int)(bestPositionScore(1, onMove * (-1),valueSoFar, alpha, beta) * onMove * (-1)) == kingPrice)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
+            if ((int)(bestMoveScore(1, onMove * (-1),valueSoFar, alpha, beta) * onMove * (-1)) == kingPrice)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
             {
                 bestValue = -100000 * depth * onMove;//Dostanu mat, co nejnižší skóre
             }
@@ -371,7 +376,7 @@ public:
     {
         Piece* backup = pieceAt(column, row);
         setPieceAt(column, row, p);
-        auto foundVal = bestPositionScore(depth, occupancyToTry, valueSoFar, alpha, beta);
+        auto foundVal = bestMoveScore(depth, occupancyToTry, valueSoFar, alpha, beta);
         setPieceAt(column, row, backup);
         return foundVal;
     }
@@ -380,7 +385,7 @@ public:
     {
         Piece* backup = pieceAt(column, row);
         setPieceAt(column, row, p);
-        auto foundVal = positionScore();
+        auto foundVal = positionScoreHeuristic();
         setPieceAt(column, row, backup);
         return foundVal;
     }
@@ -435,7 +440,7 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
                 changeInto = this;
             Piece* backup = board.pieceAt(column, row);
             board.setPieceAt(column, row, changeInto);
-            firstPositions.emplace_back(board, price * occupancy(), price * occupancy());
+            firstPositions.emplace_back(board, valueSoFar + price * occupancy(), valueSoFar + price * occupancy());
             //firstPositions[firstPositions.size() - 1].board.print();
             board.setPieceAt(column, row, backup);
             //firstPositions[firstPositions.size() - 1].board.print();
@@ -547,7 +552,7 @@ struct Pawn : public Piece {
         }
     }
 
-    virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
+    virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
     {
         double bestValue = INT32_MAX * (-1) * occupancy();
 
@@ -562,16 +567,21 @@ struct Pawn : public Piece {
         {
 
             for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
-
-                tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar,(*availableOptions)[i], 0, 0);
+                double valueDifferenceNextMove = ((*availableOptions)[i]->price(row + advanceRow()) - price(row))* occupancy();
+                tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], 0, 0);
                 if (canGoTwoFields(row))
-                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, (*availableOptions)[i], 0, 0);
+                {
+                    double valueDifferenceNextMove = ((*availableOptions)[i]->price(row + advanceRow()*2) - price(row)) * occupancy();
+                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], 0, 0);
+                }
+                    
 
             }
         }
         for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
-            tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, (*availableOptions)[i], DBL_MIN);
-            tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, (*availableOptions)[i], DBL_MIN);
+            double valueDifferenceNextMove = ((*availableOptions)[i]->price(row + advanceRow()) - price(row)) * occupancy();
+            tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
+            tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
         }
         board.setPieceAt(column, row, this);
 
@@ -584,7 +594,7 @@ struct Pawn : public Piece {
 
 struct Knight : public Piece {
 
-    virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
 
@@ -614,7 +624,7 @@ struct Knight : public Piece {
 
 
 struct Bishop : public Piece {
-    virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override {
+    virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
         //if (depth <= 0)
@@ -683,7 +693,7 @@ struct Bishop : public Piece {
 
 
 struct Rook : public Piece {
-    virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
 
@@ -749,7 +759,7 @@ struct Rook : public Piece {
 
 struct Queen : public Piece {
 
-    virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         //board.print();
 
         double bestValue = INT32_MAX * (-1) * occupancy();
@@ -864,7 +874,7 @@ struct Queen : public Piece {
 };
 
 struct King : public Piece {
-    virtual double bestPosition(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         double bestValue = INT32_MAX * (-1) * occupancy();
 
         board.setPieceAt(column, row, nullptr);
@@ -1188,12 +1198,12 @@ void findOutArgument(BoardWithValues* board, int_fast8_t depth, char onMove)//, 
 
     if (onMove < 0)
     {
-        board->bestFoundValue= toDestroy.bestPositionScore(depth, onMove, board->pieceTakenValue, alphaOrBeta, DBL_MAX);
+        board->bestFoundValue= toDestroy.bestMoveScore(depth, onMove, board->pieceTakenValue, alphaOrBeta, DBL_MAX);
         alphaOrBeta = max(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
     }
     else
     {
-        board->bestFoundValue = toDestroy.bestPositionScore(depth, onMove,board->pieceTakenValue, -DBL_MAX, alphaOrBeta);
+        board->bestFoundValue = toDestroy.bestMoveScore(depth, onMove,board->pieceTakenValue, -DBL_MAX, alphaOrBeta);
         alphaOrBeta = min(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
     }
 
@@ -1298,7 +1308,7 @@ vector<BoardWithValues> allBoardsFromPosition(Board& board, char onMove)
     onMoveW = onMove;
     depthW = 1;
     saveToVector = true;
-    board.bestPositionScore(1, onMove, 0, -DBL_MAX, DBL_MAX);
+    board.bestMoveScore(1, onMove, 0, -DBL_MAX, DBL_MAX);
     saveToVector = false;
     auto res = firstPositions;
     firstPositions.clear();
@@ -1622,14 +1632,27 @@ int main() {
     deterministic = false;
 
 
-    wcout << "White/Black? [w/b]" << endl;
-    string color;
-    cin >> color;
+    //wcout << "White/Black? [w/b]" << endl;
+    //string color;
+    //cin >> color;
 
-    char side = color[0] == 'w' ? 1 : -1;
+    //char side = color[0] == 'w' ? 1 : -1;
 
 
-    playGameInTime(startingPosition(), side, 10000);
+    //playGameInTime(startingPosition(), side, 10000);
+
+    Board promotion;
+    promotion.deleteAndOverwritePiece('h', '5', new PawnBlack);
+    promotion.deleteAndOverwritePiece('d', '5', new PawnBlack);
+    promotion.deleteAndOverwritePiece('f', '5', new KingBlack);
+    promotion.deleteAndOverwritePiece('g', '1', new BishopBlack);
+    promotion.deleteAndOverwritePiece('e', '2', new KingWhite);
+    promotion.deleteAndOverwritePiece('b', '5', new PawnWhite);
+    promotion.deleteAndOverwritePiece('a', '6', new PawnWhite);
+
+    promotion.print();
+
+    playGameResponding(promotion, 1);
 
     
     //playGameResponding(startingPosition(), -1);
