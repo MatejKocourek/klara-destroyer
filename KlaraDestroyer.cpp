@@ -30,6 +30,7 @@
 #  include <io.h>
 #  include <fcntl.h>
 #endif
+#include <random>
 
 
 using namespace std;
@@ -63,6 +64,7 @@ bool itsTimeToStop;//atomic too slow
 bool evaluateMoves = false;
 char depthW;
 char onMoveW;
+bool deterministic;
 
 
 struct Piece {
@@ -218,25 +220,43 @@ public:
         pieces[posFrom] = nullptr;
     }
 
-    void print() const
+    void print(char onMove=1) const
     {
-        for (int i = 7; i >= 0; --i) {
-            wcout << i + 1 << ' ';
-            for (int j = 0; j < 8; ++j) {
-                wcout << '|';
-                //wcout<<((((j+i*8)%2)==0)?"\033[40m":"\033[43m");
-                if (pieces[j + i * 8] != nullptr)
-                    wcout << pieces[j + i * 8]->print();
-                else
-                    wcout << L' ';
+        if (onMove<0)
+        {
+            for (int i = 0; i < 8; ++i) {
+                wcout << i + 1 << ' ';
+                for (int j = 7; j >= 0; --j) {
+                    wcout << '|';
+                    if (pieces[j + i * 8] != nullptr)
+                        wcout << pieces[j + i * 8]->print();
+                    else
+                        wcout << L' ';
+                }
+                wcout << '|' << endl;
             }
-            wcout << '|' << endl;
+            wcout << "   h g f e d c b a";
         }
-        wcout << "   a b c d e f g h";
-        /*
-        for (char j = 'a'; j <= 'h'; ++j) {
-            wcout<<j<<L' ';
-        }*/
+        else
+        {
+            for (int i = 7; i >= 0; --i) {
+                wcout << i + 1 << ' ';
+                for (int j = 0; j < 8; ++j) {
+                    wcout << '|';
+                    //wcout<<((((j+i*8)%2)==0)?"\033[40m":"\033[43m");
+                    if (pieces[j + i * 8] != nullptr)
+                        wcout << pieces[j + i * 8]->print();
+                    else
+                        wcout << L' ';
+                }
+                wcout << '|' << endl;
+            }
+            wcout << "   a b c d e f g h";
+            /*
+            for (char j = 'a'; j <= 'h'; ++j) {
+                wcout<<j<<L' ';
+            }*/
+        }
         wcout << endl;
     }
 
@@ -513,12 +533,14 @@ struct Pawn : public Piece {
     virtual double priceRelative(int_fast8_t relativeRowDistanceFromStart) const {
         //return 1;
         switch (relativeRowDistanceFromStart) {
+        case 4:
+            return 1.1;
         case 5:
             return 1.5;
         case 6:
-            return 2;
-        case 7:
             return 3;
+        case 7:
+            return 5;
         default:
             return 1;
 
@@ -1260,10 +1282,14 @@ pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fas
 
 }
 
-void timeLimit(int milliseconds)
+
+void timeLimit(int milliseconds, bool * doNotStop)
 {
     this_thread::sleep_for(chrono::milliseconds(milliseconds));
-    itsTimeToStop = true;
+    if (!*doNotStop)
+        itsTimeToStop = true;
+    delete doNotStop;
+    
 }
 
 vector<BoardWithValues> allBoardsFromPosition(Board& board, char onMove)
@@ -1276,7 +1302,22 @@ vector<BoardWithValues> allBoardsFromPosition(Board& board, char onMove)
     saveToVector = false;
     auto res = firstPositions;
     firstPositions.clear();
-    std::stable_sort(res.begin(), res.end());
+
+    if (!deterministic)
+    {
+        std::random_device rd;
+        auto rng = std::default_random_engine{ rd() };
+        std::shuffle(res.begin(), res.end(), rng);
+    }
+    
+    std::sort(res.begin(), res.end());
+
+    //for (size_t i = 0; i < res.size(); i++)
+    //{
+    //    wcout << res[i].bestFoundValue << endl;
+    //    res[i].board.print();
+    //}
+
     return res;
 }
 
@@ -1286,10 +1327,15 @@ pair<Board, double> findBestOnTopLevel(Board& board, int_fast8_t depth, char onM
     return findBestOnSameLevel(move(tmp), depth - 1, onMove * (-1));
 }
 
-pair<Board, double> findBestInTimeLimit(Board& board, char onMove, int milliseconds)
+pair<Board, double> findBestInTimeLimit(Board& board, char onMove, int milliseconds, bool endSooner = true)
 {
     evaluateMoves = false;
-    auto limit = thread(timeLimit, milliseconds);
+
+    bool* tellThemToStop = new bool;
+    *tellThemToStop = false;
+
+    auto limit = thread(timeLimit, milliseconds,tellThemToStop);
+    auto start = chrono::high_resolution_clock::now();
 
     auto boardList = allBoardsFromPosition(board, onMove);
     //for (size_t i = 0; i < boardList.size(); i++)
@@ -1306,16 +1352,32 @@ pair<Board, double> findBestInTimeLimit(Board& board, char onMove, int milliseco
         auto bestPosFound = findBestOnSameLevel(boardList, i, onMove * (-1));
         evaluateMoves = false;
         if (itsTimeToStop)
-            break;
-        else
         {
-            res = bestPosFound;
+            limit.join();
+            break;
         }
+
+        res = bestPosFound;
         wcout << i + 1 << ' ';
+
+        if (endSooner)
+        {
+            double elapsed = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - start).count();
+            double remaining = milliseconds - elapsed;
+
+            if (remaining/4.0  < elapsed)
+            {
+                wcout << endl << "Would not likely finish next stage, optimizing out " << remaining / 1000 << "s.";
+                itsTimeToStop = true;
+                *tellThemToStop = true;
+                limit.detach();//prasarna
+                break;
+            }
+        }
+
         
     }
     wcout << endl;
-    limit.join();
 
     return res;
 }
@@ -1408,9 +1470,9 @@ void benchmark(char depth = 8, Board board = startingPosition(), char onMove = 1
 }
 
 
-long long boardUserInput(Board& board)
+long long boardUserInput(Board& board, char printToSide)
 {
-    board.print();
+
     string tmp;
     auto startHuman = chrono::high_resolution_clock::now();
     cin >> tmp;
@@ -1421,30 +1483,35 @@ long long boardUserInput(Board& board)
     {
         try
         {
-            if (tmp.length()<4)
+            if ((tmp.length()-4)%5!=0)
                 throw exception("bad input");
-            if (tmp[0] == 'w' && tmp[1] == 'q')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new QueenWhite());
-            else if (tmp[0] == 'b' && tmp[1] == 'q')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new QueenBlack());
-            else if (tmp[0] == 'w' && tmp[1] == 'r')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new RookWhite());
-            else if (tmp[0] == 'b' && tmp[1] == 'r')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new RookBlack());
-            else if (tmp[0] == 'w' && tmp[1] == 'b')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new BishopWhite());
-            else if (tmp[0] == 'b' && tmp[1] == 'b')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new BishopBlack());
-            else if (tmp[0] == 'w' && tmp[1] == 'k')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new KnightWhite());
-            else if (tmp[0] == 'b' && tmp[1] == 'k')
-                board.deleteAndOverwritePiece(tmp[2], tmp[3], new KnightBlack());
-            else
+
+            for (size_t i = 0; i < tmp.length(); i+=5)
             {
-                board.deleteAndMovePiece(tmp[0], tmp[1], tmp[2], tmp[3]);
-                if (tmp.size() > 4)
-                    board.deleteAndMovePiece(tmp[5], tmp[6], tmp[7], tmp[8]);
+                if (tmp[0+i] == 'w' && tmp[1+i] == 'q')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new QueenWhite());
+                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'q')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new QueenBlack());
+                else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'r')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new RookWhite());
+                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'r')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new RookBlack());
+                else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'b')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new BishopWhite());
+                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'b')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new BishopBlack());
+                else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'k')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new KnightWhite());
+                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'k')
+                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], new KnightBlack());
+                else
+                {
+                    board.deleteAndMovePiece(tmp[0 + i], tmp[1 + i], tmp[2 + i], tmp[3 + i]);
+                    if (tmp.size() < 5 + i || tmp[4 + i] != '+')
+                        break;
+                }
             }
+            
 
             break;
         }
@@ -1459,31 +1526,62 @@ long long boardUserInput(Board& board)
     auto elapsedHuman = chrono::duration_cast<chrono::milliseconds>(endHuman - startHuman).count();
     wcout << "Human moved in " << elapsedHuman / 1000.0 << "s." << endl;
 
-    board.print();
+    board.print(printToSide);
     return elapsedHuman + 10;
 }
 
 
 void playGameInTime(Board board, char onMove, int timeToPlay)
 {
-    board.print();
+    board.print(onMove);
     if (onMove < 0)
     {
-        boardUserInput(board);
+        boardUserInput(board,onMove);
     }
     
     while (true)
     {
         auto start = chrono::high_resolution_clock::now();
+        auto balanceBefore = board.balance();
         auto result = findBestInTimeLimit(board, onMove, timeToPlay);
         board = result.first;
-        wcout << "Best position found score change: " << result.second << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+        wcout << "Score change: " << result.second << endl<<"Score result: "<< result.second+balanceBefore <<endl;
         auto end = chrono::high_resolution_clock::now();
 
         auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
         wcout << "Done in " << elapsed << "s." << endl;
+        board.print(onMove);
 
-        boardUserInput(board);
+        while (isspace(cin.peek()))
+            cin.get();
+
+        char op = cin.get();
+
+        if (op == '+' || op == '-' || op == '=')
+        {
+            int seconds;
+            cin >> seconds;
+            switch (op)
+            {
+            case('+'):
+                timeToPlay += seconds * 1000;
+                break;
+            case('-'):
+                timeToPlay -= seconds * 1000;
+                break;
+            case('='):
+                timeToPlay = seconds * 1000;
+                break;
+            }
+            wcout << "Time for move changed to " << timeToPlay << "ms." << endl;
+        }
+        else
+        {
+            cin.putback(op);
+        }
+
+        
+        boardUserInput(board, onMove);
 
     }
 }
@@ -1495,7 +1593,7 @@ void playGameResponding(Board board, char onMove)
     long long milliseconds = 5000;
     if (onMove < 0)
     {
-        milliseconds = boardUserInput(board);
+        milliseconds = boardUserInput(board, onMove);
     }
 
     while (true)
@@ -1511,27 +1609,31 @@ void playGameResponding(Board board, char onMove)
         auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
         wcout << "PC answered in " << elapsed << "s." << endl;
 
-        milliseconds = boardUserInput(board);
+        board.print();
+        milliseconds = boardUserInput(board, onMove);
     }
 }
 
 
 int main() {
     std::wcout.sync_with_stdio(false);
+    std::wcout.precision(2);
     init_locale();
+    deterministic = false;
 
-    //Board testing = startingPosition();
-    //testing.deleteAndMovePiece('c', '7', 'c', '6');
-    //testing.deleteAndMovePiece('d', '7', 'd', '5');
-    //testing.deleteAndMovePiece('e', '7', 'e', '6');
-    //testing.deleteAndMovePiece('b', '1', 'c', '3');
-    //testing.deleteAndMovePiece('f', '1', 'd', '3');
-    //testing.deleteAndMovePiece('g', '1', 'f', '3');
-    //testing.deleteAndMovePiece('e', '2', 'e', '3');
-    //testing.deleteAndMovePiece('d', '2', 'd', '4');
+
+    wcout << "White/Black? [w/b]" << endl;
+    string color;
+    cin >> color;
+
+    char side = color[0] == 'w' ? 1 : -1;
+
+
+    playGameInTime(startingPosition(), side, 10000);
+
     
-    playGameResponding(startingPosition(), -1);
-    //benchmark(8, testing, 1);
+    //playGameResponding(startingPosition(), -1);
+    //benchmark(10);
 
     return 0;
 }
