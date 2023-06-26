@@ -536,20 +536,24 @@ struct Pawn : public Piece {
     virtual bool canGoTwoFields(char row) const = 0;
 
     virtual double priceRelative(int_fast8_t relativeRowDistanceFromStart) const {
-        //return 1;
-        switch (relativeRowDistanceFromStart) {
-        case 4:
-            return 1.1;
-        case 5:
-            return 1.5;
-        case 6:
-            return 3;
-        case 7:
-            return 5;
-        default:
-            return 1;
 
-        }
+        if (relativeRowDistanceFromStart >= 5)
+            return 1.000001;
+        return 1;
+        //return 1;
+        //switch (relativeRowDistanceFromStart) {
+        ////case 4:
+        //  //  return 1.1;
+        //case 5:
+        //    return 1.25;
+        //case 6:
+        //    return 2;
+        //case 7:
+        //    return 3;
+        //default:
+        //    return 1;
+
+        //}
     }
 
     virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
@@ -1632,31 +1636,31 @@ int main() {
     deterministic = false;
 
 
-    //wcout << "White/Black? [w/b]" << endl;
-    //string color;
-    //cin >> color;
+    wcout << "White/Black? [w/b]" << endl;
+    string color;
+    cin >> color;
 
-    //char side = color[0] == 'w' ? 1 : -1;
+    char side = color[0] == 'w' ? 1 : -1;
 
-
+    playGameResponding(startingPosition(), side);
     //playGameInTime(startingPosition(), side, 10000);
 
-    Board promotion;
-    promotion.deleteAndOverwritePiece('h', '5', new PawnBlack);
-    promotion.deleteAndOverwritePiece('d', '5', new PawnBlack);
-    promotion.deleteAndOverwritePiece('f', '5', new KingBlack);
-    promotion.deleteAndOverwritePiece('g', '1', new BishopBlack);
-    promotion.deleteAndOverwritePiece('e', '2', new KingWhite);
-    promotion.deleteAndOverwritePiece('b', '5', new PawnWhite);
-    promotion.deleteAndOverwritePiece('a', '6', new PawnWhite);
+    //Board promotion;
+    //promotion.deleteAndOverwritePiece('h', '5', new PawnBlack);
+    //promotion.deleteAndOverwritePiece('d', '5', new PawnBlack);
+    //promotion.deleteAndOverwritePiece('f', '5', new KingBlack);
+    //promotion.deleteAndOverwritePiece('g', '1', new BishopBlack);
+    //promotion.deleteAndOverwritePiece('e', '2', new KingWhite);
+    //promotion.deleteAndOverwritePiece('b', '5', new PawnWhite);
+    //promotion.deleteAndOverwritePiece('a', '6', new PawnWhite);
 
-    promotion.print();
+    //promotion.print();
 
-    playGameResponding(promotion, 1);
+    //playGameResponding(promotion, 1);
 
     
     //playGameResponding(startingPosition(), -1);
-    //benchmark(10);
+    //benchmark(8);
 
     return 0;
 }
