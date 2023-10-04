@@ -6,7 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
-
+#include <array>
 
 #ifndef MS_STDLIB_BUGS // Allow overriding the autodetection.
 /* The Microsoft C and C++ runtime libraries that ship with Visual Studio, as
@@ -31,6 +31,7 @@
 #  include <fcntl.h>
 #endif
 #include <random>
+#include <cassert>
 
 
 using namespace std;
@@ -58,7 +59,7 @@ void init_locale(void)
 
 class Board;
 
-const int kingPrice = 1000000000;
+const int kingPrice = 1000;
 
 bool itsTimeToStop;//atomic too slow
 bool evaluateMoves = false;
@@ -73,15 +74,16 @@ struct Piece {
         return L' ';
     }*/
 
-    virtual char occupancy() const = 0;/*
+    virtual constexpr int_fast8_t occupancy() const = 0;/*
     {
         return 0;
     }*/
 
-    virtual double price(char row) const = 0;/*
-    {
-        return 0;
-    }*/
+    virtual constexpr float price(uint_fast8_t column, uint_fast8_t row) const = 0;
+
+    virtual constexpr float pricePiece() const = 0;
+
+    virtual constexpr float priceAdjustment(uint_fast8_t column, uint_fast8_t row) const = 0;
 
     virtual Piece* clone() const = 0;/*
     {
@@ -98,8 +100,9 @@ struct Piece {
         return 0;
     }*/
 
-    virtual void tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, uint_fast16_t& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto = nullptr,  double minPriceToTake = 0, double maxPriceToTake = DBL_MAX);
+    virtual void tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, uint_fast16_t& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto = nullptr, double minPriceToTake = 0, double maxPriceToTake = DBL_MAX);
 
+    virtual ~Piece() = default;
 };
 
 bool saveToVector = false;
@@ -107,7 +110,8 @@ bool saveToVector = false;
 //const Piece emptyField;
 
 class Board {
-    Piece* pieces[64];
+    std::array<Piece*, 64> pieces;
+    //Piece* pieces[64];
 public:
 
     Board(const Board& copy)
@@ -130,8 +134,7 @@ public:
     Board& operator=(Board&& move)
     {
         for (uint_fast8_t i = 0; i < 64; ++i) {
-            if (pieces[i] != nullptr)
-                delete pieces[i];
+            delete pieces[i];
             pieces[i] = move.pieces[i];
             move.pieces[i] = nullptr;
         }
@@ -141,8 +144,7 @@ public:
     Board& operator=(const Board& copy)
     {
         for (uint_fast8_t i = 0; i < 64; ++i) {
-            if (pieces[i] != nullptr)
-                delete pieces[i];
+            delete pieces[i];
             if (copy.pieces[i] != nullptr)
                 pieces[i] = copy.pieces[i]->clone();
             else
@@ -152,22 +154,21 @@ public:
     }
 
 
-    Board()
+    Board() : pieces{{nullptr}}
     {
-        for (uint_fast8_t i = 0; i < 64; ++i) {
-            pieces[i] = nullptr;//new Piece();
-        }
+        //for (auto& i : pieces) {
+        //    i = nullptr;
+        //}
     }
 
     ~Board()
     {
-        for (uint_fast8_t i = 0; i < 64; ++i) {
-            if (pieces[i] != nullptr)
-                delete pieces[i];
+        for (const auto& i : pieces) {
+            delete i;
         }
     }
 
-    double priceInLocation(char column, char row, char playerColor) const
+    float priceInLocation(char column, char row, int_fast8_t playerColor) const
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
             return -1;
@@ -181,7 +182,7 @@ public:
         if (pieces[index]->occupancy() == playerColor)
             return -1;
         else
-            return pieces[index]->price(row);
+            return pieces[index]->price(column-'a',row-'1');
     }
     Piece* pieceAt(char column, char row)
     {
@@ -275,11 +276,11 @@ public:
         return res;
     }
     
-    double balance() const {
-        double res = 0;
+    float balance() const {
+        float res = 0;
         for (uint_fast8_t i = 0; i < 64; ++i) {
-            if (pieces[i] != nullptr)
-                res += pieces[i]->price(i >> 3) * pieces[i]->occupancy();
+            if (pieces[i] != nullptr && pieces[i]->pricePiece()!=kingPrice)
+                res += pieces[i]->price(i % 8, i / 8) * pieces[i]->occupancy();
         }
 
         return res;
@@ -295,7 +296,7 @@ public:
                 beta = DBL_MAX;
                 uint_fast16_t totalMoves = 0;
                 double totalValues = 0;
-                pieces[i]->bestMoveWithThisPieceScore(*this, (i & 0b111) + 'a', (i >> 3) + '1', 1, alpha, beta, totalMoves, totalValues, 0,true);
+                pieces[i]->bestMoveWithThisPieceScore(*this, (i % 8) + 'a', (i / 8) + '1', 1, alpha, beta, totalMoves, totalValues, 0,true);
 
                 res += (((double)totalMoves)/2.0) * pieces[i]->occupancy();
                 if(totalMoves>0)
@@ -396,10 +397,10 @@ public:
 struct BoardWithValues {
     Board board;
     double bestFoundValue;
-    double pieceTakenValue;
+    double startingValue;
 
-    BoardWithValues(const BoardWithValues& copy):board(copy.board),bestFoundValue(copy.bestFoundValue),pieceTakenValue(copy.pieceTakenValue){}
-    BoardWithValues(BoardWithValues&& toMove) noexcept :board(move(toMove.board)), bestFoundValue(toMove.bestFoundValue), pieceTakenValue(toMove.pieceTakenValue) {}
+    BoardWithValues(const BoardWithValues& copy) = default;//:board(copy.board),bestFoundValue(copy.bestFoundValue),pieceTakenValue(copy.pieceTakenValue){}
+    BoardWithValues(BoardWithValues&& toMove) noexcept = default;// :board(move(toMove.board)), bestFoundValue(toMove.bestFoundValue), pieceTakenValue(toMove.pieceTakenValue) {}
 
 
     //BoardWithValues& operator=(BoardWithValues&& toMove) = default;
@@ -411,7 +412,8 @@ struct BoardWithValues {
         return l.bestFoundValue < r.bestFoundValue;
     }
 
-    BoardWithValues(Board board, double bestFoundValue, double pieceTakenValue):board(move(board)),bestFoundValue(bestFoundValue),pieceTakenValue(pieceTakenValue) {}
+    //BoardWithValues(Board board, double bestFoundValue, double startingValue):board(move(board)),bestFoundValue(bestFoundValue), startingValue(startingValue) {}
+    BoardWithValues(Board board, double startingValue) :board(move(board)), bestFoundValue(startingValue), startingValue(startingValue) {}
 };
 
 
@@ -440,7 +442,9 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
                 changeInto = this;
             Piece* backup = board.pieceAt(column, row);
             board.setPieceAt(column, row, changeInto);
-            firstPositions.emplace_back(board, valueSoFar + price * occupancy(), valueSoFar + price * occupancy());
+
+            double pieceTakenValue = valueSoFar + price * occupancy();
+            firstPositions.emplace_back(board, board.balance());
             //firstPositions[firstPositions.size() - 1].board.print();
             board.setPieceAt(column, row, backup);
             //firstPositions[firstPositions.size() - 1].board.print();
@@ -451,7 +455,7 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
         if (doNotContinue)
             return;
 
-        if (price == kingPrice)//Je možné vzít krále
+        if (price >= kingPrice-50)//Je možné vzít krále
         {
             doNotContinue = true;
             bestValue = price * occupancy();
@@ -525,7 +529,7 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, char column, char row, int_
 }
 
 
-struct Pawn : public Piece {
+struct Pawn : virtual public Piece {
     //virtual bool canBeEvolved(char row) const = 0;
     virtual char evolveRow() const = 0;
 
@@ -535,25 +539,48 @@ struct Pawn : public Piece {
 
     virtual bool canGoTwoFields(char row) const = 0;
 
-    virtual double priceRelative(int_fast8_t relativeRowDistanceFromStart) const {
+    //virtual double priceRelative(int_fast8_t relativeRowDistanceFromStart) const {
 
-        if (relativeRowDistanceFromStart >= 5)
-            return 1.000001;
-        return 1;
-        //return 1;
-        //switch (relativeRowDistanceFromStart) {
-        ////case 4:
-        //  //  return 1.1;
-        //case 5:
-        //    return 1.25;
-        //case 6:
-        //    return 2;
-        //case 7:
-        //    return 3;
-        //default:
-        //    return 1;
+    //    if (relativeRowDistanceFromStart >= 5)
+    //        return 1.000001;
+    //    return 1;
+    //    //return 1;
+    //    //switch (relativeRowDistanceFromStart) {
+    //    ////case 4:
+    //    //  //  return 1.1;
+    //    //case 5:
+    //    //    return 1.25;
+    //    //case 6:
+    //    //    return 2;
+    //    //case 7:
+    //    //    return 3;
+    //    //default:
+    //    //    return 1;
 
-        //}
+    //    //}
+    //}
+
+    constexpr float pricePiece() const final
+    {
+        return 10;
+    }
+    
+
+    constexpr float priceAdjustment(uint_fast8_t column, uint_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
+            {+5.0, +5.0, +5.0, +5.0, +5.0, +5.0, +5.0, +5.0},
+            {+1.0, +1.0, +2.0, +3.0, +3.0, +2.0, +1.0, +1.0},
+            {+0.5, +0.5, +1.0, +2.5, +2.5, +1.0, +0.5, +0.5},
+            {+0.0, +0.0, +0.0, +2.0, +2.0, +0.0, +0.0, +0.0},
+            {+0.5, -0.5, -1.0, +0.0, +0.0, -1.0, -0.5, +0.5},
+            {+0.5, +1.0, +1.0, -2.0, -2.0, +1.0, +1.0, +0.5},
+            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
+        } };
+
+        return arr[row][column];
     }
 
     virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
@@ -571,11 +598,14 @@ struct Pawn : public Piece {
         {
 
             for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
-                double valueDifferenceNextMove = ((*availableOptions)[i]->price(row + advanceRow()) - price(row))* occupancy();
-                tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], 0, 0);
-                if (canGoTwoFields(row))
+                //One field forward
                 {
-                    double valueDifferenceNextMove = ((*availableOptions)[i]->price(row + advanceRow()*2) - price(row)) * occupancy();
+                    double valueDifferenceNextMove = ((*availableOptions)[i]->price(column - 'a', row - '1' + advanceRow()) - price(column - 'a', row - '1')) * occupancy();
+                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], 0, 0);
+                }
+                if (canGoTwoFields(row))//Two fields forward
+                {
+                    double valueDifferenceNextMove = ((*availableOptions)[i]->price(column - 'a', row - '1' + advanceRow() * 2) - price(column - 'a', row - '1')) * occupancy();
                     tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], 0, 0);
                 }
                     
@@ -583,9 +613,16 @@ struct Pawn : public Piece {
             }
         }
         for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
-            double valueDifferenceNextMove = ((*availableOptions)[i]->price(row + advanceRow()) - price(row)) * occupancy();
-            tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
-            tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
+            if(column<'h')
+            {
+                double valueDifferenceNextMove = ((*availableOptions)[i]->price(column - 'a' + 1, row + advanceRow() - '1') - price(column - 'a', row - '1')) * occupancy();
+                tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
+            }
+            if(column>'a')
+            {
+                double valueDifferenceNextMove = ((*availableOptions)[i]->price(column - 'a' - 1, row + advanceRow() - '1') - price(column - 'a', row - '1')) * occupancy();
+                tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
+            }
         }
         board.setPieceAt(column, row, this);
 
@@ -596,7 +633,7 @@ struct Pawn : public Piece {
 };
 
 
-struct Knight : public Piece {
+struct Knight : virtual public Piece {
 
     virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
@@ -621,13 +658,30 @@ struct Knight : public Piece {
     }
 
 
-    virtual double price(char row) const override {
-        return 3.2;
+    virtual constexpr float pricePiece() const final {
+        return 32;
+    }
+
+    constexpr float priceAdjustment(uint_fast8_t column, uint_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {-5.0, -4.0, -3.0, -3.0, -3.0, -3.0, -4.0, -5.0},
+            {-4.0, -2.0, +0.0, +0.0, +0.0, +0.0, -2.0, -4.0},
+            {-3.0, +0.0, +1.0, +1.5, +1.5, +1.0, +0.0, -3.0},
+            {-3.0, +0.5, +1.5, +2.0, +2.0, +1.5, +0.5, -3.0},
+            {-3.0, +0.0, +1.5, +2.0, +2.0, +1.5, +0.0, -3.0},
+            {-3.0, +0.5, +1.0, +1.5, +1.5, +1.0, +0.5, -3.0},
+            {-4.0, -2.0, +0.0, +0.5, +0.5, +0.0, -2.0, -4.0},
+            {-5.0, -4.0, -3.0, -3.0, -3.0, -3.0, -4.0, -5.0},
+        } };
+
+        return arr[row][column];
     }
 };
 
 
-struct Bishop : public Piece {
+struct Bishop : virtual public Piece {
     virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
@@ -689,14 +743,30 @@ struct Bishop : public Piece {
         return bestValue;
     }
 
+    virtual constexpr float pricePiece() const final {
+        return 33.3;
+    }
 
-    virtual double price(char row) const override {
-        return 3.33;
+    constexpr float priceAdjustment(uint_fast8_t column, uint_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {-2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -2.0},
+            {-1.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -1.0},
+            {-1.0, +0.0, +0.5, +1.0, +1.0, +0.5, +0.0, -1.0},
+            {-1.0, +0.5, +0.5, +1.0, +1.0, +0.5, +0.5, -1.0},
+            {-1.0, +0.0, +1.0, +1.0, +1.0, +1.0, +0.0, -1.0},
+            {-1.0, +1.0, +1.0, +1.0, +1.0, +1.0, +1.0, -1.0},
+            {-1.0, +0.5, +0.0, +0.0, +0.0, +0.0, +0.5, -1.0},
+            {-2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -2.0},
+        } };
+
+        return arr[row][column];
     }
 };
 
 
-struct Rook : public Piece {
+struct Rook : virtual public Piece {
     virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
         double bestValue = INT32_MAX * (-1) * occupancy();
@@ -754,14 +824,30 @@ struct Rook : public Piece {
         return bestValue;
     }
 
+    virtual constexpr float pricePiece() const final {
+        return 51;
+    }
 
-    virtual double price(char row) const override {
-        return 5.1;
+    constexpr float priceAdjustment(uint_fast8_t column, uint_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
+            {+0.5, +1.0, +1.0, +1.0, +1.0, +1.0, +1.0, +0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {+0.0, +0.0, +0.0, +0.5, +0.5, +0.0, +0.0, +0.0},
+        } };
+
+        return arr[row][column];
     }
 };
 
 
-struct Queen : public Piece {
+struct Queen : virtual public Piece {
 
     virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         //board.print();
@@ -872,12 +958,29 @@ struct Queen : public Piece {
     }
 
 
-    virtual double price(char row) const override {
-        return 8.8;
+    virtual constexpr float pricePiece() const final {
+        return 88;
+    }
+
+    constexpr float priceAdjustment(uint_fast8_t column, uint_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {-2.0, -1.0, -1.0, -0.5, -0.5, -1.0, -1.0, -2.0},
+            {-1.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -1.0},
+            {-1.0, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -1.0},
+            {-0.5, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -0.5},
+            {+0.0, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -0.5},
+            {-1.0, +0.5, +0.5, +0.5, +0.5, +0.5, +0.0, -1.0},
+            {-1.0, +0.0, +0.5, +0.0, +0.0, +0.0, +0.0, -1.0},
+            {-2.0, -1.0, -1.0, -0.5, -0.5, -1.0, -1.0, -2.0},
+        } };
+
+        return arr[row][column];
     }
 };
 
-struct King : public Piece {
+struct King : virtual public Piece {
     virtual double bestMoveWithThisPieceScore(Board& board, char column, char row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         double bestValue = INT32_MAX * (-1) * occupancy();
 
@@ -898,16 +1001,53 @@ struct King : public Piece {
 
     }
 
-
-    double price(char row) const override {
+    virtual constexpr float pricePiece() const final {
         return kingPrice;
+    }
+
+    //double price(char column, char row) const override {
+
+    //    return kingPrice;
+    //}
+
+    constexpr float priceAdjustment(uint_fast8_t column, uint_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = {{
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-2.0, -3.0, -3.0, -4.0, -4.0, -3.0, -3.0, -2.0},
+            {-1.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -1.0},
+            {+2.0, +2.0, +0.0, +0.0, +0.0, +0.0, +2.0, +2.0},
+            {+2.0, +3.0, +1.0, +0.0, +0.0, +1.0, +3.0, +2.0},
+        }};
+
+        //constexpr float tmp = arr[7][1];
+        
+        return arr[row][column];
     }
 };
 
-struct KnightWhite :public Knight {
-    char occupancy() const override {
+struct WhitePiece : virtual Piece {
+    constexpr int_fast8_t occupancy() const final {
         return 1;
     }
+    constexpr float price(uint_fast8_t column, uint_fast8_t row) const final {
+        return pricePiece() + priceAdjustment(column, 7-row);
+    }
+};
+struct BlackPiece : virtual Piece {
+    constexpr int_fast8_t occupancy() const final {
+        return -1;
+    }
+    constexpr float price(uint_fast8_t column, uint_fast8_t row) const final {
+        return pricePiece() + priceAdjustment(7-column, row);
+    }
+};
+
+struct KnightWhite final :public Knight, public WhitePiece {
     wchar_t print() const override {
         return L'♘';
     }
@@ -920,10 +1060,7 @@ struct KnightWhite :public Knight {
     }
 };
 
-struct KnightBlack :public Knight {
-    char occupancy() const override {
-        return -1;
-    }
+struct KnightBlack :public Knight, public BlackPiece {
     wchar_t print() const override {
         return L'♞';
     }
@@ -935,10 +1072,7 @@ struct KnightBlack :public Knight {
     }
 };
 
-struct BishopWhite :public Bishop {
-    char occupancy() const override {
-        return 1;
-    }
+struct BishopWhite :public Bishop, public WhitePiece {
     wchar_t print() const override {
         return L'♗';
     }
@@ -950,10 +1084,7 @@ struct BishopWhite :public Bishop {
     }
 };
 
-struct BishopBlack :public Bishop {
-    char occupancy() const override {
-        return -1;
-    }
+struct BishopBlack :public Bishop, public BlackPiece {
     wchar_t print() const override {
         return L'♝';
     }
@@ -965,10 +1096,7 @@ struct BishopBlack :public Bishop {
     }
 };
 
-struct RookWhite :public Rook {
-    char occupancy() const override {
-        return 1;
-    }
+struct RookWhite :public Rook, public WhitePiece {
     wchar_t print() const override {
         return L'♖';
     }
@@ -980,10 +1108,7 @@ struct RookWhite :public Rook {
     }
 };
 
-struct RookBlack :public Rook {
-    char occupancy() const override {
-        return -1;
-    }
+struct RookBlack :public Rook, public BlackPiece {
     wchar_t print() const override {
         return L'♜';
     }
@@ -994,10 +1119,7 @@ struct RookBlack :public Rook {
         return 'R';
     }
 };
-struct QueenWhite :public Queen {
-    char occupancy() const override {
-        return 1;
-    }
+struct QueenWhite :public Queen, public WhitePiece {
     wchar_t print() const override {
         return L'♕';
     }
@@ -1008,10 +1130,7 @@ struct QueenWhite :public Queen {
         return 'q';
     }
 };
-struct QueenBlack :public Queen {
-    char occupancy() const override {
-        return -1;
-    }
+struct QueenBlack :public Queen, public BlackPiece {
     wchar_t print() const override {
         return L'♛';
     }
@@ -1022,10 +1141,7 @@ struct QueenBlack :public Queen {
         return 'Q';
     }
 };
-struct KingWhite :public King {
-    char occupancy() const override {
-        return 1;
-    }
+struct KingWhite :public King, public WhitePiece {
     wchar_t print() const override {
         return L'♔';
     }
@@ -1036,10 +1152,10 @@ struct KingWhite :public King {
         return 'k';
     }
 };
-struct KingBlack :public King {
-    char occupancy() const override {
-        return -1;
-    }
+struct KingBlack :public King, public BlackPiece {
+    //char occupancy() const override {
+    //    return -1;
+    //}
     wchar_t print() const override {
         return L'♚';
     }
@@ -1052,10 +1168,7 @@ struct KingBlack :public King {
 };
 
 
-struct PawnWhite :public Pawn {
-    char occupancy() const override {
-        return 1;
-    }
+struct PawnWhite :public Pawn, public WhitePiece {
     wchar_t print() const override {
         return L'♙';
     }
@@ -1083,28 +1196,25 @@ struct PawnWhite :public Pawn {
     }
 
 
-    double price(char row) const override {
-        return priceRelative(row - '0');
-        ////return 1;
-        //switch (row) {
-        //case '5':
-        //    return 1.5;
-        //case '6':
-        //    return 2;
-        //case '7':
-        //    return 3;
-        //default:
-        //    return 1;
+    //double price(char row) const override {
+    //    return priceRelative(row - '0');
+    //    ////return 1;
+    //    //switch (row) {
+    //    //case '5':
+    //    //    return 1.5;
+    //    //case '6':
+    //    //    return 2;
+    //    //case '7':
+    //    //    return 3;
+    //    //default:
+    //    //    return 1;
 
-        //}
-    }
+    //    //}
+    //}
     virtual vector<Piece*>* evolveIntoReference(char row) const;
 
 };
-struct PawnBlack :public Pawn {
-    char occupancy() const override {
-        return -1;
-    }
+struct PawnBlack :public Pawn, public BlackPiece {
     wchar_t print() const override {
         return L'♟';
     }
@@ -1128,21 +1238,21 @@ struct PawnBlack :public Pawn {
         return 'P';
     }
 
-    double price(char row) const override {
-        return priceRelative('9'- row);
-        ////return 1;
-        //switch (row) {
-        //case '4':
-        //    return 1.5;
-        //case '3':
-        //    return 2;
-        //case '2':
-        //    return 3;
-        //default:
-        //    return 1;
+    //double price(char row) const override {
+    //    return priceRelative('9'- row);
+    //    ////return 1;
+    //    //switch (row) {
+    //    //case '4':
+    //    //    return 1.5;
+    //    //case '3':
+    //    //    return 2;
+    //    //case '2':
+    //    //    return 3;
+    //    //default:
+    //    //    return 1;
 
-        //}
-    }
+    //    //}
+    //}
 
     virtual vector<Piece*>* evolveIntoReference(char row) const;
 
@@ -1202,12 +1312,12 @@ void findOutArgument(BoardWithValues* board, int_fast8_t depth, char onMove)//, 
 
     if (onMove < 0)
     {
-        board->bestFoundValue= toDestroy.bestMoveScore(depth, onMove, board->pieceTakenValue, alphaOrBeta, DBL_MAX);
+        board->bestFoundValue= toDestroy.bestMoveScore(depth, onMove, board->startingValue, alphaOrBeta, DBL_MAX);
         alphaOrBeta = max(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
     }
     else
     {
-        board->bestFoundValue = toDestroy.bestMoveScore(depth, onMove,board->pieceTakenValue, -DBL_MAX, alphaOrBeta);
+        board->bestFoundValue = toDestroy.bestMoveScore(depth, onMove,board->startingValue, -DBL_MAX, alphaOrBeta);
         alphaOrBeta = min(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
     }
 
@@ -1228,7 +1338,7 @@ void workerFromQ()//, double alpha = -DBL_MAX, double beta = DBL_MAX)
     }
 }
 
-auto stopper = BoardWithValues(Board(), -DBL_MAX, -DBL_MAX);
+auto stopper = BoardWithValues(Board(), -DBL_MAX);
 
 
 
@@ -1287,11 +1397,11 @@ pair<Board, double> findBestOnSameLevel(vector<BoardWithValues>& boards, int_fas
     
     if (onMove == 1)
     {
-        return { boards[0].board,boards[0].bestFoundValue };
+        return { boards[0].board,boards[0].bestFoundValue/10 };
     }
     else
     {
-        return { boards[boards.size() - 1].board,boards[boards.size() - 1].bestFoundValue };
+        return { boards[boards.size() - 1].board,boards[boards.size() - 1].bestFoundValue/10 };
     }
 
 }
@@ -1338,7 +1448,7 @@ vector<BoardWithValues> allBoardsFromPosition(Board& board, char onMove)
 pair<Board, double> findBestOnTopLevel(Board& board, int_fast8_t depth, char onMove)
 {
     auto tmp = allBoardsFromPosition(board, onMove);
-    return findBestOnSameLevel(move(tmp), depth - 1, onMove * (-1));
+    return findBestOnSameLevel(tmp, depth - 1, onMove * (-1));
 }
 
 pair<Board, double> findBestInTimeLimit(Board& board, char onMove, int milliseconds, bool endSooner = true)
@@ -1401,6 +1511,14 @@ pair<Board, double> findBestInNumberOfMoves(Board& board, char onMove, char move
     evaluateMoves = false;
     auto boardList = allBoardsFromPosition(board, onMove);
 
+    for (const auto& i : boardList)
+    {
+        std::wcout << i.bestFoundValue << std::endl;
+        i.board.print();
+        std::wcout << std::endl;
+    }
+
+
     pair<Board, double> res;
     evaluateMoves = true;
 
@@ -1451,7 +1569,6 @@ Board startingPosition()
     initial.deleteAndOverwritePiece('f', '8', new BishopBlack());
     initial.deleteAndOverwritePiece('g', '8', new KnightBlack());
     initial.deleteAndOverwritePiece('h', '8', new RookBlack());
-    initial.deleteAndOverwritePiece('h', '7', new RookWhite());
 
     initial.deleteAndOverwritePiece('a', '7', new PawnBlack());
     initial.deleteAndOverwritePiece('b', '7', new PawnBlack());
@@ -1635,15 +1752,17 @@ int main() {
     init_locale();
     deterministic = false;
 
-
+    //benchmark(8);
+    //
+    // return 0;
     wcout << "White/Black? [w/b]" << endl;
     string color;
     cin >> color;
 
     char side = color[0] == 'w' ? 1 : -1;
 
-    playGameResponding(startingPosition(), side);
-    //playGameInTime(startingPosition(), side, 10000);
+
+    playGameInTime(startingPosition(), side, 10000);
 
     //Board promotion;
     //promotion.deleteAndOverwritePiece('h', '5', new PawnBlack);
