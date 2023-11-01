@@ -302,10 +302,9 @@ public:
 
     Piece* pieceAt(int_fast8_t column, int_fast8_t row)
     {
-        if (column < 0 || column > 7 || row < 0 || row > 7)
-            return nullptr;
-        else
-            return pieces[column + (row * 8)];
+        assert (!(column < 0 || column > 7 || row < 0 || row > 7));
+        //else
+        return pieces[column + (row * 8)];
     }
 
     Piece* pieceAt(char column, char row)
@@ -422,15 +421,6 @@ public:
         os << endl;
     }
 
-    
-    //string printBasic() const
-    //{
-    //    string res;
-    //    for (uint_fast8_t i = 0; i < 64; ++i) {
-    //        res += pieces[i]->printBasic();
-    //    }
-    //    return res;
-    //}
 
     std::array<char, 6> findDiff(const Board& old)
     {
@@ -474,7 +464,7 @@ public:
     
     float balance() const {
         float res = 0;
-        for (uint_fast8_t i = 0; i < 64; ++i) {
+        for (int_fast8_t i = 0; i < 64; ++i) {
             if (pieces[i] != nullptr)// && pieces[i]->pricePiece()!=kingPrice)
                 res += pieces[i]->price(i % 8, i / 8) * pieces[i]->occupancy();
         }
@@ -660,7 +650,7 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fas
         
         totalValues += price * occupancy();
 
-        if (saveToVector) [[unlikely]]
+        if (saveToVector && depth==0) [[unlikely]]
         {
 
             //if (changeInto == nullptr)
@@ -827,31 +817,30 @@ struct Pawn : virtual public Piece {
         if (board.priceInLocation(column, row + advanceRow(), occupancy()) == 0)//Muzu jit pescem o jedno dopredu
         {
 
-            for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
+            for (const auto& evolveOption : *availableOptions) {
                 //One field forward
                 {
-                    double valueDifferenceNextMove = ((*availableOptions)[i]->price(column, row + advanceRow()) - price(column, row)) * occupancy();
-                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], 0, 0);
+                    double valueDifferenceNextMove = (evolveOption->price(column, row + advanceRow()) - price(column, row)) * occupancy();
+                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, 0, 0);
                 }
                 if (canGoTwoFields(row))//Two fields forward
                 {
-                    double valueDifferenceNextMove = ((*availableOptions)[i]->price(column, row + advanceRow() * 2) - price(column, row)) * occupancy();
-                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], 0, 0);
+                    double valueDifferenceNextMove = (evolveOption->price(column, row + advanceRow() * 2) - price(column, row)) * occupancy();
+                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, 0, 0);
                 }
-                    
 
             }
         }
-        for (int_fast8_t i = 0; i < availableOptions->size(); ++i) {
+        for (const auto& evolveOption : *availableOptions) {
             if(column<7)
             {
-                double valueDifferenceNextMove = ((*availableOptions)[i]->price(column + 1, row + advanceRow()) - price(column, row)) * occupancy();
-                tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
+                double valueDifferenceNextMove = (evolveOption->price(column + 1, row + advanceRow()) - price(column, row)) * occupancy();
+                tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, DBL_MIN);
             }
             if(column>0)
             {
-                double valueDifferenceNextMove = ((*availableOptions)[i]->price(column - 1, row + advanceRow()) - price(column, row)) * occupancy();
-                tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, (*availableOptions)[i], DBL_MIN);
+                double valueDifferenceNextMove = (evolveOption->price(column - 1, row + advanceRow()) - price(column, row)) * occupancy();
+                tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, DBL_MIN);
             }
         }
         board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1494,26 +1483,43 @@ struct PawnBlack final:public Pawn, public BlackPiece {
     virtual static_vector<Piece*,4>* evolveIntoReference(int_fast8_t row) const;
 
 } pawnBlack;
+
 static_vector<Piece*,4> whiteEvolvePawnOnly = { &pawnWhite };
 static_vector<Piece*,4> whiteEvolveLastRow = { &queenWhite, &rookWhite, &bishopWhite, &knightWhite };
 static_vector<Piece*,4> blackEvolvePawnOnly = { &pawnBlack };
 static_vector<Piece*,4> blackEvolveLastRow = { &queenBlack, &rookBlack, &bishopBlack, &knightBlack };
 
 static_vector<Piece*,4>* PawnWhite::evolveIntoReference(int_fast8_t row) const {
-    if (row == evolveRow())
+    if (row == evolveRow()) [[unlikely]]
         return &whiteEvolveLastRow;
-    else
+    else [[likely]]
         return &whiteEvolvePawnOnly;
 }
 
 static_vector<Piece*,4>* PawnBlack::evolveIntoReference(int_fast8_t row) const {
-    if (row == evolveRow())
+    if (row == evolveRow()) [[unlikely]]
         return &blackEvolveLastRow;
-    else
+    else [[likely]]
         return &blackEvolvePawnOnly;
 }
 
+template<typename T>
+inline void update_max(std::atomic<T>& atom, const T val)
+{
+    for (T atom_val = atom;
+        atom_val < val &&
+        !atom.compare_exchange_weak(atom_val, val, std::memory_order_relaxed);
+        );
+}
 
+template<typename T>
+inline void update_min(std::atomic<T>& atom, const T val)
+{
+    for (T atom_val = atom;
+        atom_val > val &&
+        !atom.compare_exchange_weak(atom_val, val, std::memory_order_relaxed);
+        );
+}
 
 atomic<double> alphaOrBeta;
 
@@ -1551,11 +1557,13 @@ void findOutArgument(BoardWithValues* board, int_fast8_t depth)//, double alpha 
     {
     case PlayerSide::BLACK: {
         board->bestFoundValue = toDestroy.bestMoveScore(depth, board->startingValue, alphaOrBeta, DBL_MAX);
-        alphaOrBeta = std::max(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
+        update_max(alphaOrBeta, board->bestFoundValue);
+        //alphaOrBeta = std::max(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
     } break;
     case PlayerSide::WHITE: {
         board->bestFoundValue = toDestroy.bestMoveScore(depth, board->startingValue, -DBL_MAX, alphaOrBeta);
-        alphaOrBeta = std::min(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
+        update_min(alphaOrBeta, board->bestFoundValue);
+        //alphaOrBeta = std::min(alphaOrBeta * 1.0, board->bestFoundValue * 1.0);
     } break;
     default:
         std::unreachable();
@@ -1683,6 +1691,9 @@ void timeLimit(int milliseconds, bool * doNotStop)
     
 }
 
+auto rd = std::random_device{};
+auto rng = std::default_random_engine{ rd() };
+
 vector<BoardWithValues> allBoardsFromPosition(Board& board)
 {
     itsTimeToStop = false;
@@ -1696,8 +1707,6 @@ vector<BoardWithValues> allBoardsFromPosition(Board& board)
 
     if (!deterministic)
     {
-        std::random_device rd;
-        auto rng = std::default_random_engine{ rd() };
         std::shuffle(res.begin(), res.end(), rng);
     }
     
@@ -1705,7 +1714,7 @@ vector<BoardWithValues> allBoardsFromPosition(Board& board)
 
     //for (size_t i = 0; i < res.size(); i++)
     //{
-    //    wcout << res[i].bestFoundValue << endl;
+    //    std::cerr << res[i].bestFoundValue << endl;
     //    res[i].board.print(std::cerr);
     //}
 
@@ -2400,7 +2409,11 @@ int main(int argc, char** argv) {
         }
     }
     else
+    {
+        deterministic = false;
         return uci();
+    }
+        
 
     return 0;
 }

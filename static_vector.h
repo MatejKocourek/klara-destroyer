@@ -228,7 +228,7 @@ public:
 
 	struct Iterator
 	{
-		//using iterator_category = std::contiguous_iterator_tag;
+		using iterator_category = std::contiguous_iterator_tag;
 		using difference_type = std::ptrdiff_t;
 		using value_type = T;
 		using pointer = T*;
@@ -258,7 +258,7 @@ public:
 
 	struct ConstantIterator
 	{
-		//using iterator_category = std::contiguous_iterator_tag;
+		using iterator_category = std::contiguous_iterator_tag;
 		using difference_type = std::ptrdiff_t;
 		using value_type = T;
 		using pointer = T*;
