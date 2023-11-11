@@ -283,7 +283,7 @@ public:
             {
                 auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
 
-                if (foundVal != INT16_MAX * (-1) * onMove)
+                if (foundVal != std::numeric_limits<double>::infinity() * (-1) * onMove)
                     return true;
             }
         }
@@ -554,7 +554,7 @@ public:
         //}
 
             
-        double bestValue = INT16_MAX * (-1) * playerOnMove;
+        double bestValue = std::numeric_limits<double>::infinity() * (-1) * playerOnMove;
         double totalValues = 0;
 
 
@@ -592,7 +592,7 @@ public:
             //return -DBL_MAX;
 
 
-        if (bestValue == (double)(INT16_MAX * playerOnMove * (-1))) [[unlikely]]//Nemůžu udělat žádný legitimní tah (pat nebo mat)
+        if (bestValue == (double)(std::numeric_limits<double>::infinity() * playerOnMove * (-1))) [[unlikely]]//Nemůžu udělat žádný legitimní tah (pat nebo mat)
         {
             bool saveToVectorBackup = saveToVector;
             saveToVector = false;
@@ -779,7 +779,7 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fas
 
                 foundVal = foundOnly;
 
-                if ((foundOnly * occupancy() * (-1)) >= kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
+                if ((foundOnly * occupancy() * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
                 {
                     //if (foundVal > 0)
                     totalMoves -= 1;
@@ -879,7 +879,7 @@ struct Pawn : virtual public Piece {
 
     virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
     {
-        double bestValue = INT16_MAX * (-1) * occupancy();
+        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
         uint_fast16_t moves = 0;
 
@@ -932,7 +932,7 @@ struct Knight : virtual public Piece {
 
     virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
-        double bestValue = INT16_MAX * (-1) * occupancy();
+        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
         //if (depth <= 0)
           //  return 0;
@@ -981,7 +981,7 @@ struct Knight : virtual public Piece {
 struct Bishop : virtual public Piece {
     virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override {
 
-        double bestValue = INT16_MAX * (-1) * occupancy();
+        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
         //if (depth <= 0)
           //  return 0;
 
@@ -1067,7 +1067,7 @@ struct Bishop : virtual public Piece {
 struct Rook : virtual public Piece {
     virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
-        double bestValue = INT16_MAX * (-1) * occupancy();
+        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
         board.setPieceAt(column, row, nullptr);
         board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1151,7 +1151,7 @@ struct Queen : virtual public Piece {
     virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         //researchedBoard.print();
 
-        double bestValue = INT16_MAX * (-1) * occupancy();
+        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
 
         Piece* originalPiece = board.pieceAt(column, row);
@@ -1281,7 +1281,7 @@ struct Queen : virtual public Piece {
 
 struct King : virtual public Piece {
     virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
-        double bestValue = INT16_MAX * (-1) * occupancy();
+        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
         board.setPieceAt(column, row, nullptr);
         board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1628,18 +1628,18 @@ void evaluateGameMove(GameMove& board, i8 depth)//, double alpha = -DBL_MAX, dou
     Board localBoard(board.researchedBoard);
 
     if(options.MultiPV>1) [[unlikely]]//If we want to know multiple good moves, we cannot prune using a/B at root level
-        board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, -DBL_MAX, DBL_MAX);
+        board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
     else
     {
         switch (localBoard.playerOnMove)
         {
         case PlayerSide::BLACK: {
-            board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, alphaOrBeta, DBL_MAX);
+            board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, alphaOrBeta, std::numeric_limits<double>::infinity());
             update_max(alphaOrBeta, board.bestFoundValue);
             //alphaOrBeta = std::max(alphaOrBeta * 1.0, researchedBoard->bestFoundValue * 1.0);
         } break;
         case PlayerSide::WHITE: {
-            board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, -DBL_MAX, alphaOrBeta);
+            board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, -std::numeric_limits<double>::infinity(), alphaOrBeta);
             update_min(alphaOrBeta, board.bestFoundValue);
             //alphaOrBeta = std::min(alphaOrBeta * 1.0, researchedBoard->bestFoundValue * 1.0);
         } break;
@@ -2359,30 +2359,51 @@ int uci()
         {
             timeGlobalStarted = std::chrono::high_resolution_clock::now();
 
-            int64_t wtime = 0, btime = 0, winc = 0, binc = 0;
+            std::array<double, 2> playerTime;
+            std::array<double, 2> playerInc;
+            //int64_t wtime = 0, btime = 0, winc = 0, binc = 0;
+            double timeTargetMax = 0;
+            double timeTargetOptimal = 0;
+            i8 maxDepth = std::numeric_limits<i8>::max();
 
             while (true)
             {
                 auto word = getWord(commandView);
                 if (word.empty())
                     break;
-                if (word == "wtime")
-                    wtime = atoi(getWord(commandView).data());
-                if (word == "btime")
-                    btime = atoi(getWord(commandView).data());
-                if (word == "winc")
-                    winc = atoi(getWord(commandView).data());
-                if (word == "binc")
-                    binc = atoi(getWord(commandView).data());
+                else if (word == "wtime")
+                    playerTime[(PlayerSide::WHITE + 1) / 2] = atoll(getWord(commandView).data());
+                else if (word == "btime")
+                    playerTime[(PlayerSide::BLACK + 1) / 2] = atoll(getWord(commandView).data());
+                else if (word == "winc")
+                    playerInc[(PlayerSide::WHITE + 1) / 2] = atoll(getWord(commandView).data());
+                else if (word == "binc")
+                    playerInc[(PlayerSide::BLACK + 1) / 2] = atoll(getWord(commandView).data());
+                else if (word == "movetime")
+                {
+                    timeTargetMax = atoll(getWord(commandView).data());
+                    timeTargetOptimal = timeTargetMax;
+                }
+                else if (word == "infinite")
+                {
+                    timeTargetMax = std::numeric_limits<double>::infinity();
+                    timeTargetOptimal = std::numeric_limits<double>::infinity();
+                }
+                else if (word == "depth")
+                    maxDepth = atoll(getWord(commandView).data());
             }
 
-            float gamePhase = (17.0f - board.countPiecesMin()) / 16.0f;
+            if (timeTargetMax == 0)//We have to calculate our own time
+            {
+                float gamePhase = (17.0f - board.countPiecesMin()) / 16.0f;
 
-            int64_t myTime = board.playerOnMove == 1 ? wtime : btime;
-            int64_t myInc = board.playerOnMove == 1 ? winc : binc;
+                const int64_t& myTime = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? wtime : btime;
+                const int64_t& myInc = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
 
-            int64_t timeTargetOptimal = myInc + myTime * gamePhase / 6;
-            int64_t timeTargetMax = myInc + myTime * gamePhase / 3;
+                timeTargetOptimal = myInc + myTime * gamePhase / 6;
+                timeTargetMax = myInc + myTime * gamePhase / 3;
+            }
+
 
             std::cerr << "Targeting " << timeTargetOptimal << " ms." << std::endl;
             std::cerr << "Highest I can go is " << timeTargetMax << " ms." << std::endl;
@@ -2398,7 +2419,7 @@ int uci()
 
             //std::cerr << "Depth: ";
 
-            for (int_fast8_t i = 2; /*i < 100*/; i += 2) {
+            for (i8 i = 2; i <= maxDepth; i += 2) {
                 out << "info " << "depth " << unsigned(i) << nl << std::flush;
 
                 bestPosFound = findBestOnSameLevel(boardList, i);
