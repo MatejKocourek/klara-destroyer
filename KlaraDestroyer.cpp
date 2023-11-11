@@ -41,7 +41,7 @@
 #define nl '\n'
 
 
-using namespace std;
+
 void init_locale(void)
 // Does magic so that wcout can work.
 {
@@ -339,7 +339,7 @@ public:
     Piece* pieceAt(char column, char row)
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
-            throw exception("Invalid coordinates");
+            throw std::exception("Invalid coordinates");
         else
             return pieceAt((int_fast8_t)(column - 'a'), (int_fast8_t)(row - '1'));
     }
@@ -354,7 +354,7 @@ public:
     void setPieceAt(char column, char row, Piece* p)
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
-            throw exception("Invalid coordinates");
+            throw std::exception("Invalid coordinates");
         else
             return setPieceAt((int_fast8_t)(column - 'a'), (int_fast8_t)(row - '1'), p);
     }
@@ -370,7 +370,7 @@ public:
     void deleteAndOverwritePiece(char column, char row, Piece* p)
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
-            throw exception("Invalid coordinates");
+            throw std::exception("Invalid coordinates");
 
         //delete pieces[(column - 'a') + (row - '1') * 8];
         return deleteAndOverwritePiece((int_fast8_t)(column - 'a'), (int_fast8_t)(row - '1'), p);
@@ -379,13 +379,13 @@ public:
     void deleteAndMovePiece(char columnFrom, char rowFrom, char columnTo, char rowTo)
     {
         if (columnFrom < 'a' || columnFrom>'h' || rowFrom < '1' || rowFrom>'8' || columnTo < 'a' || columnTo>'h' || rowTo < '1' || rowTo>'8')
-            throw exception("Invalid coordinates");
+            throw std::exception("Invalid coordinates");
 
         const uint_fast8_t posFrom = (columnFrom - 'a') + (rowFrom - '1') * 8;
         const uint_fast8_t posTo = (columnTo - 'a') + (rowTo - '1') * 8;
 
         if (pieces[posFrom] == nullptr)
-            throw exception("Trying to move empty field");
+            throw std::exception("Trying to move empty field");
 
         //delete pieces[posTo];
         pieces[posTo] = pieces[posFrom];
@@ -525,7 +525,7 @@ public:
 
                 res += (((double)totalMoves)/2.0) * pieces[i]->occupancy();
                 if(totalMoves>0)
-                    res += min(max(totalValues,-100.0),100.0);
+                    res += std::min(std::max(totalValues,-100.0),100.0);
             }
         }
         return res / 10000.0;
@@ -697,11 +697,11 @@ struct GameMove {
     }
 
     //GameMove(Board researchedBoard, double bestFoundValue, double startingValue):researchedBoard(move(researchedBoard)),bestFoundValue(bestFoundValue), startingValue(startingValue) {}
-    GameMove(Board board, double startingValue) :researchedBoard(move(board)), bestFoundValue(startingValue), startingValue(startingValue) {}
+    GameMove(Board board, double startingValue) :researchedBoard(std::move(board)), bestFoundValue(startingValue), startingValue(startingValue) {}
 };
 
 
-static vector<GameMove> firstPositions;
+static std::vector<GameMove> firstPositions;
 
 
 
@@ -1706,7 +1706,7 @@ void printMoveInfo(unsigned depth, const double &elapsedTotal, const GameMove& m
 
 GameMove findBestOnSameLevel(std::vector<GameMove>& boards, int_fast8_t depth)//, PlayerSide onMove)
 {
-    timeDepthStarted = chrono::high_resolution_clock::now();
+    timeDepthStarted = std::chrono::high_resolution_clock::now();
     assert(!boards.empty());
     PlayerSide onMoveResearched = boards.front().researchedBoard.playerOnMove;
     depth -= boards.front().researchedDepth;
@@ -1740,7 +1740,7 @@ GameMove findBestOnSameLevel(std::vector<GameMove>& boards, int_fast8_t depth)//
             evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
         
 
-        std::vector<thread> threads;
+        std::vector<std::thread> threads;
         threads.reserve(threadCount - 1);
         for (size_t i = 1; i < threadCount; ++i)
             threads.emplace_back(workerFromQ,i);
@@ -1767,7 +1767,7 @@ GameMove findBestOnSameLevel(std::vector<GameMove>& boards, int_fast8_t depth)//
     }
     
     
-    auto elapsedTotal = std::chrono::duration<double, std::milli>(chrono::high_resolution_clock::now() - timeGlobalStarted).count();
+    auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
 
 
     float scoreCp = boards.front().bestFoundValue;
@@ -1790,7 +1790,7 @@ GameMove findBestOnSameLevel(std::vector<GameMove>& boards, int_fast8_t depth)//
 
 void timeLimit(int milliseconds, bool * doNotStop)
 {
-    this_thread::sleep_for(chrono::milliseconds(milliseconds));
+    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     if (!*doNotStop)
         itsTimeToStop = true;
     delete doNotStop;
@@ -1873,7 +1873,7 @@ std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//
         std::unreachable();
     }
 
-    auto elapsedTotal = std::chrono::duration<double, std::milli>(chrono::high_resolution_clock::now() - timeGlobalStarted).count();
+    auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
 
     for (size_t i = res.size()-1;i!=(size_t)(-1); --i)
         printMoveInfo(depth, elapsedTotal, res[i], i + 1, false, bestForWhichSide);
@@ -1883,7 +1883,7 @@ std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//
     return res;
 }
 
-pair<Board, double> findBestOnTopLevel(Board& board, i8 depth, PlayerSide onMove)
+std::pair<Board, double> findBestOnTopLevel(Board& board, i8 depth, PlayerSide onMove)
 {
     auto tmp = generateMoves(board, onMove);//, onMove);
     auto res = findBestOnSameLevel(tmp, depth - 1);//, oppositeSide(onMove));
@@ -2032,12 +2032,12 @@ Board posFromString(std::string_view str)
 GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = true)
 {
     //dynamicPositionRanking = false;
-    timeGlobalStarted = chrono::high_resolution_clock::now();
+    timeGlobalStarted = std::chrono::high_resolution_clock::now();
 
     bool* tellThemToStop = new bool;
     *tellThemToStop = false;
 
-    auto limit = thread(timeLimit, milliseconds,tellThemToStop);
+    auto limit = std::thread(timeLimit, milliseconds,tellThemToStop);
     //auto start = chrono::high_resolution_clock::now();
 
     auto boardList = generateMoves(board,board.playerOnMove);
@@ -2050,7 +2050,7 @@ GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = tr
     GameMove res;
     //dynamicPositionRanking = true;
 
-    wcout << "Depth: ";
+    std::wcout << "Depth: ";
     for (int_fast8_t i = 4; i < 100; i += 2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i);//, oppositeSide(researchedBoard.playerOnMove));
         //dynamicPositionRanking = false;
@@ -2061,16 +2061,16 @@ GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = tr
         }
 
         res = bestPosFound;
-        wcout << i << ' ';
+        std::wcout << i << ' ';
 
         if (endSooner)
         {
-            double elapsed = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - timeGlobalStarted).count();
+            double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
             double remaining = milliseconds - elapsed;
 
             if (remaining/4.0  < elapsed)
             {
-                wcout << endl << "Would not likely finish next stage, optimizing out " << remaining / 1000 << "s.";
+                std::wcout << std::endl << "Would not likely finish next stage, optimizing out " << remaining / 1000 << "s.";
                 itsTimeToStop = true;
                 *tellThemToStop = true;
                 limit.detach();//prasarna
@@ -2080,14 +2080,14 @@ GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = tr
 
         
     }
-    wcout << endl;
+    std::wcout << std::endl;
 
     return res;
 }
 
 GameMove findBestInNumberOfMoves(Board& board, int_fast8_t moves)
 {
-    timeGlobalStarted = chrono::high_resolution_clock::now();
+    timeGlobalStarted = std::chrono::high_resolution_clock::now();
     //dynamicPositionRanking = false;
     auto boardList = generateMoves(board,board.playerOnMove);
 
@@ -2102,7 +2102,7 @@ GameMove findBestInNumberOfMoves(Board& board, int_fast8_t moves)
     GameMove res;
     //dynamicPositionRanking = true;
 
-    wcout << "Depth: ";
+    std::wcout << "Depth: ";
     for (int_fast8_t i = 4; i <= moves; i += 2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i);
         //dynamicPositionRanking = false;
@@ -2112,9 +2112,9 @@ GameMove findBestInNumberOfMoves(Board& board, int_fast8_t moves)
         {
             res = bestPosFound;
         }
-        wcout << i << ' ';
+        std::wcout << i << ' ';
     }
-    wcout << endl;
+    std::wcout << std::endl;
 
     return res;
 }
@@ -2123,21 +2123,21 @@ GameMove findBestInNumberOfMoves(Board& board, int_fast8_t moves)
 void benchmark(char depth = 8, Board board = startingPosition())
 {
     board.print();
-    auto start = chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     //doneMoves.clear();
     //auto result = findBestOnTopLevel(researchedBoard,depth,onMove);
     //auto result = findBestInTimeLimit(researchedBoard, onMove, timeToPlay);
     auto result = findBestInNumberOfMoves(board, depth);
-    auto end = chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
 
     //std::string_view move = result.firstMoveNotation.data();
     //executeMove(board, move);
-    wcout << result.firstMoveNotation.data() << std::endl;
+    std::wcout << result.firstMoveNotation.data() << std::endl;
 
-    wcout << "cp: " << result.bestFoundValue << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+    std::wcout << "cp: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
 
-    auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
-    wcout << "Done in " << elapsed << "s." << endl;
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
+    std::wcout << "Done in " << elapsed << "s." << std::endl;
 
     //board.printW();
 }
@@ -2146,10 +2146,10 @@ void benchmark(char depth = 8, Board board = startingPosition())
 long long boardUserInput(Board& board, PlayerSide printToSide)
 {
 
-    string tmp;
-    auto startHuman = chrono::high_resolution_clock::now();
-    cin >> tmp;
-    auto endHuman = chrono::high_resolution_clock::now();
+    std::string tmp;
+    auto startHuman = std::chrono::high_resolution_clock::now();
+    std::cin >> tmp;
+    auto endHuman = std::chrono::high_resolution_clock::now();
 
 
     while (true)
@@ -2157,7 +2157,7 @@ long long boardUserInput(Board& board, PlayerSide printToSide)
         try
         {
             if ((tmp.length()-4)%5!=0)
-                throw exception("bad input");
+                throw std::exception("bad input");
 
             for (size_t i = 0; i < tmp.length(); i+=5)
             {
@@ -2190,14 +2190,14 @@ long long boardUserInput(Board& board, PlayerSide printToSide)
         }
         catch (const std::exception& e)
         {
-            out << e.what() << endl;
-            cin >> tmp;
+            out << e.what() << std::endl;
+            std::cin >> tmp;
         }
     }
 
 
-    auto elapsedHuman = chrono::duration_cast<chrono::milliseconds>(endHuman - startHuman).count();
-    wcout << "Human moved in " << elapsedHuman / 1000.0 << "s." << endl;
+    auto elapsedHuman = std::chrono::duration_cast<std::chrono::milliseconds>(endHuman - startHuman).count();
+    std::wcout << "Human moved in " << elapsedHuman / 1000.0 << "s." << std::endl;
 
     board.print(printToSide);
     return elapsedHuman + 10;
@@ -2215,27 +2215,27 @@ void playGameInTime(Board board, PlayerSide onMove, int timeToPlay)
     
     while (true)
     {
-        auto start = chrono::high_resolution_clock::now();
+        auto start = std::chrono::high_resolution_clock::now();
         auto balanceBefore = board.balance();
         auto result = findBestInTimeLimit(board, timeToPlay);
         std::string_view move = result.firstMoveNotation.data();
         executeMove(board, move);
-        wcout << "Score change: " << result.bestFoundValue << endl<<"Score result: "<< result.bestFoundValue + balanceBefore <<endl;
-        auto end = chrono::high_resolution_clock::now();
+        std::wcout << "Score change: " << result.bestFoundValue << std::endl<<"Score result: "<< result.bestFoundValue + balanceBefore << std::endl;
+        auto end = std::chrono::high_resolution_clock::now();
 
-        auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
-        wcout << "Done in " << elapsed << "s." << endl;
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
+        std::wcout << "Done in " << elapsed << "s." << std::endl;
         board.print(onMove);
 
-        while (isspace(cin.peek()))
-            cin.get();
+        while (isspace(std::cin.peek()))
+            std::cin.get();
 
-        char op = cin.get();
+        char op = std::cin.get();
 
         if (op == '+' || op == '-' || op == '=')
         {
             int seconds;
-            cin >> seconds;
+            std::cin >> seconds;
             switch (op)
             {
             case('+'):
@@ -2248,11 +2248,11 @@ void playGameInTime(Board board, PlayerSide onMove, int timeToPlay)
                 timeToPlay = seconds * 1000;
                 break;
             }
-            wcout << "Time for move changed to " << timeToPlay << "ms." << endl;
+            std::wcout << "Time for move changed to " << timeToPlay << "ms." << std::endl;
         }
         else
         {
-            cin.putback(op);
+            std::cin.putback(op);
         }
 
         
@@ -2273,18 +2273,18 @@ void playGameResponding(Board board, PlayerSide onMove)
 
     while (true)
     {
-        auto start = chrono::high_resolution_clock::now();
+        auto start = std::chrono::high_resolution_clock::now();
         //doneMoves.clear();
         board.playerOnMove = onMove;
         auto result = findBestInTimeLimit(board, milliseconds);
         //auto result = findBestInNumberOfMoves(researchedBoard, onMove, 8);
-        auto end = chrono::high_resolution_clock::now();
+        auto end = std::chrono::high_resolution_clock::now();
         std::string_view move = result.firstMoveNotation.data();
         executeMove(board, move);
-        wcout << "Best position found score change: " << result.bestFoundValue << endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+        std::wcout << "Best position found score change: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
 
-        auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
-        wcout << "PC answered in " << elapsed << "s." << endl;
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
+        std::wcout << "PC answered in " << elapsed << "s." << std::endl;
 
         board.print();
         milliseconds = boardUserInput(board, onMove);
@@ -2357,7 +2357,7 @@ int uci()
         }
         else if (commandFirst == "go")
         {
-            timeGlobalStarted = chrono::high_resolution_clock::now();
+            timeGlobalStarted = std::chrono::high_resolution_clock::now();
 
             int64_t wtime = 0, btime = 0, winc = 0, binc = 0;
 
@@ -2402,9 +2402,9 @@ int uci()
                 out << "info " << "depth " << unsigned(i) << nl << std::flush;
 
                 bestPosFound = findBestOnSameLevel(boardList, i);
-                auto elapsed = std::chrono::duration<double, std::milli>(chrono::high_resolution_clock::now() - timeDepthStarted).count();
+                auto elapsed = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeDepthStarted).count();
                 //chrono::duration_cast<chrono::milliseconds>();
-                auto elapsedTotal = std::chrono::duration<double, std::milli>(chrono::high_resolution_clock::now() - timeGlobalStarted).count();
+                auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
 
                 float scoreCp = bestPosFound.bestFoundValue;
 
@@ -2502,9 +2502,9 @@ int main(int argc, char** argv) {
         else if (argument == "timed")
         {
             deterministic = false;
-            wcout << "White/Black? [w/b]" << endl;
-            string color;
-            cin >> color;
+            std::wcout << "White/Black? [w/b]" << std::endl;
+            std::string color;
+            std::cin >> color;
 
             PlayerSide side = color[0] == 'w' ? PlayerSide::WHITE : PlayerSide::BLACK;
 
@@ -2513,9 +2513,9 @@ int main(int argc, char** argv) {
         else if (argument == "imitating")
         {
             deterministic = false;
-            wcout << "White/Black? [w/b]" << endl;
-            string color;
-            cin >> color;
+            std::wcout << "White/Black? [w/b]" << std::endl;
+            std::string color;
+            std::cin >> color;
 
             PlayerSide side = color[0] == 'w' ? PlayerSide::WHITE : PlayerSide::BLACK;
 
