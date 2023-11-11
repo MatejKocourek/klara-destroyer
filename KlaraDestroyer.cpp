@@ -131,12 +131,12 @@ struct Piece {
         return os << symbolW();
     }
 
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNotContinue = false) = 0;/*
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNotContinue = false) = 0;/*
     {
         return 0;
     }*/
 
-    void tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, uint_fast16_t& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto = nullptr, double minPriceToTake = 0, double maxPriceToTake = DBL_MAX);
+    void tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto = nullptr, double minPriceToTake = 0, double maxPriceToTake = DBL_MAX);
 
     virtual ~Piece() = default;
 };
@@ -230,7 +230,7 @@ public:
 
     bool canTakeKing(PlayerSide onMove)
     {
-        uint_fast16_t totalMoves = 0;
+        i32 totalMoves = 0;
         double totalValues = 0;
         constexpr double valueSoFar = 0;
 
@@ -266,7 +266,7 @@ public:
 
     bool canMove(PlayerSide onMove)
     {
-        uint_fast16_t totalMoves = 0;
+        i32 totalMoves = 0;
         double totalValues = 0;
         constexpr double valueSoFar = 0;
 
@@ -288,6 +288,27 @@ public:
             }
         }
         return false;
+    }
+
+    i32 possibleMovesCount(PlayerSide onMove)
+    {
+        i32 totalMoves = 0;
+        double totalValues = 0;
+        constexpr double valueSoFar = 0;
+
+        double alpha, beta;
+        alpha = -DBL_MAX;
+        beta = DBL_MAX;
+
+        for (int_fast8_t i = 0; i < pieces.size(); ++i) {
+            Piece* found = pieces[i];
+
+            if (found == nullptr)
+                continue;
+            if (found->occupancy() == onMove)
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
+        }
+        return totalMoves;
     }
 
     bool isValidSetup()
@@ -519,7 +540,7 @@ public:
                 double alpha, beta;
                 alpha = -DBL_MAX;
                 beta = DBL_MAX;
-                uint_fast16_t totalMoves = 0;
+                i32 totalMoves = 0;
                 double totalValues = 0;
                 pieces[i]->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, 0,true);
 
@@ -558,10 +579,10 @@ public:
         double totalValues = 0;
 
 
-        uint_fast16_t totalMoves = 0;
-        int_fast8_t depthToPieces = depth;
+        i32 totalMoves = 0;
+        i8 depthToPieces = depth;
 
-        for (int_fast8_t i = 0; i < 64; ++i) {
+        for (i8 i = 0; i < 64; ++i) {
             Piece* found = pieces[i];
 
             if (found == nullptr)
@@ -705,7 +726,7 @@ static std::vector<GameMove> firstPositions;
 
 
 
-void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, uint_fast16_t& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto, double minPriceToTake, double maxPriceToTake)
+void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto, double minPriceToTake, double maxPriceToTake)
 {
     if (doNotContinue && !dynamicPositionRanking)
         return;
@@ -877,7 +898,7 @@ struct Pawn : virtual public Piece {
         return arr[row][column];
     }
 
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
     {
         double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
@@ -930,7 +951,7 @@ struct Pawn : virtual public Piece {
 
 struct Knight : virtual public Piece {
 
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
         double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
@@ -979,7 +1000,7 @@ struct Knight : virtual public Piece {
 
 
 struct Bishop : virtual public Piece {
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override {
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override {
 
         double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
         //if (depth <= 0)
@@ -1065,7 +1086,7 @@ struct Bishop : virtual public Piece {
 
 
 struct Rook : virtual public Piece {
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
 
         double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
@@ -1148,7 +1169,7 @@ struct Rook : virtual public Piece {
 
 struct Queen : virtual public Piece {
 
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         //researchedBoard.print();
 
         double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
@@ -1280,7 +1301,7 @@ struct Queen : virtual public Piece {
 };
 
 struct King : virtual public Piece {
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, uint_fast16_t& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
         double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
         board.setPieceAt(column, row, nullptr);
