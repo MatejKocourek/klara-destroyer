@@ -1706,7 +1706,25 @@ void workerFromQ(size_t threadId)//, double alpha = -DBL_MAX, double beta = DBL_
     }
 }
 
-//auto stopper = GameMove(Board(), -DBL_MAX);
+void cutoffBadMoves(std::vector<GameMove>& boards)
+{
+    double bestMoveScore = boards.front().bestFoundValue;
+
+    double cutoffPoint = bestMoveScore + 50;
+
+    size_t i = 1;
+    for (i < boards.size(); ++i;)
+    {
+        if (boards[i].bestFoundValue > cutoffPoint)
+            break;
+    }
+
+    std::cerr << "Cutting off " << boards.size() - i << " bad moves to save time" << std::endl;
+
+    boards.resize(i);
+}
+
+
 
 
 void printMoveInfo(unsigned depth, const double &elapsedTotal, const GameMove& move, size_t moveRank, bool upperbound, PlayerSide pov)
