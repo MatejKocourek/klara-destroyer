@@ -2,6 +2,7 @@
 #include <utility>
 #include <type_traits>
 #include <memory>
+#include <stdexcept>
 
 
 template <typename T, size_t N>
