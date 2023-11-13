@@ -40,7 +40,7 @@
 #define out std::cout
 #define nl '\n'
 
-
+//#define CASTLING_DISABLED
 
 void init_locale(void)
 // Does magic so that wcout can work.
@@ -102,25 +102,24 @@ struct Options {
 
 constexpr inline PlayerSide oppositeSide(PlayerSide side) noexcept
 {
-    //[[assume(side==1||side==-1)]];
+    [[assume(side==1||side==-1)]];
     return (PlayerSide)((-1) * (int_fast8_t)side);
 }
 
 struct Piece {
     virtual constexpr wchar_t symbolW() const = 0;
 
-    virtual constexpr PlayerSide occupancy() const = 0;/*
-    {
-        return 0;
-    }*/
+    virtual constexpr PlayerSide occupancy() const = 0;
 
-    virtual constexpr float price(int_fast8_t column, int_fast8_t row) const = 0;
+    constexpr float price(int_fast8_t column, int_fast8_t row) const {
+        return pricePiece() + priceAdjustmentPov(column, row);
+    }
 
     virtual constexpr float pricePiece() const = 0;
 
     virtual constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const = 0;
 
-    //virtual Piece* clone() const = 0;/*
+    virtual constexpr float priceAdjustmentPov(int_fast8_t column, int_fast8_t row) const = 0;
 
     virtual constexpr char symbolA() const = 0;
 
@@ -131,15 +130,75 @@ struct Piece {
         return os << symbolW();
     }
 
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNotContinue = false) = 0;/*
-    {
-        return 0;
-    }*/
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNotContinue = false) = 0;
 
-    void tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto = nullptr, double minPriceToTake = 0, double maxPriceToTake = DBL_MAX);
+    void tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, double valueSoFar, double minPriceToTake = 0, double maxPriceToTake = DBL_MAX);
 
     virtual ~Piece() = default;
 };
+
+struct Bait : public Piece
+{
+    constexpr wchar_t symbolW() const final
+    {
+        return L'?';
+    }
+    constexpr char symbolA() const final
+    {
+        return '?';
+    }
+    constexpr float pricePiece() const final
+    {
+        return std::numeric_limits<float>::max();
+    }
+    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
+    {
+        return 0;
+    }
+    constexpr float priceAdjustmentPov(int_fast8_t column, int_fast8_t row) const final
+    {
+        return 0;
+    }
+    double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNotContinue = false) final
+    {
+        return std::numeric_limits<double>::infinity() * (-1) * occupancy();
+    }
+};
+
+
+struct WhitePiece : virtual Piece {
+    constexpr PlayerSide occupancy() const final {
+        return PlayerSide::WHITE;
+    }
+    constexpr float priceAdjustmentPov(int_fast8_t column, int_fast8_t row) const final {
+        return priceAdjustment(column, 7 - row);
+    }
+};
+struct BlackPiece : virtual Piece {
+    constexpr PlayerSide occupancy() const final {
+        return PlayerSide::BLACK;
+    }
+    constexpr float priceAdjustmentPov(int_fast8_t column, int_fast8_t row) const final {
+        return priceAdjustment(7 - column, row);
+    }
+};
+
+struct BaitBlack final : public Bait
+{
+    constexpr PlayerSide occupancy() const final
+    {
+        return PlayerSide::BLACK;
+    }
+} baitBlack;
+
+struct BaitWhite final : public Bait
+{
+    constexpr PlayerSide occupancy() const final
+    {
+        return PlayerSide::WHITE;
+    }
+} baitWhite;
+
 
 
 struct BoardHasher
@@ -157,6 +216,10 @@ class Board {
 public:
     std::array<Piece*, 64> pieces;
     PlayerSide playerOnMove;
+    std::array<bool, 2> canCastleLeft = { true, true };
+    std::array<bool, 2> canCastleRight = { true, true };
+    //bool canCastleLeft=true;
+    //bool canCastleRight=true;
 
     auto operator<=>(const Board&) const noexcept = default;
 
@@ -261,6 +324,54 @@ public:
 
 
         playerOnMove = backup;
+        return false;
+    }
+
+    bool canSquareBeTakenBy(i8 column, i8 row, PlayerSide attacker)
+    {
+        i32 totalMoves = 0;
+        double totalValues = 0;
+        constexpr double valueSoFar = 0;
+
+        double alpha, beta;
+        alpha = -DBL_MAX;
+        beta = DBL_MAX;
+
+        Piece* backup = pieceAt(column, row);
+        if (backup == nullptr)
+            return false;
+        
+        switch (attacker)
+        {
+        case WHITE:
+            setPieceAt(column, row, &baitWhite);
+            break;
+        case BLACK:
+            setPieceAt(column, row, &baitBlack);
+            break;
+        default:
+            std::unreachable();
+        }
+
+        
+        for (int_fast8_t i = 0; i < pieces.size(); ++i) {
+            Piece* found = pieces[i];
+
+            if (found == nullptr)
+                continue;
+            if (found->occupancy() == attacker)
+            {
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
+
+                if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
+                {
+                    setPieceAt(column, row, backup);
+                    return true;
+                }
+
+            }
+        }
+        setPieceAt(column, row, backup);
         return false;
     }
 
@@ -688,6 +799,387 @@ std::size_t BoardHasher::operator()(const Board& s) const noexcept
     return res;
 }
 
+
+
+struct Knight : virtual public Piece {
+
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override;
+
+    virtual constexpr float pricePiece() const final {
+        return 32;
+    }
+
+    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8 && column >=0 && row >= 0);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {-5.0, -4.0, -3.0, -3.0, -3.0, -3.0, -4.0, -5.0},
+            {-4.0, -2.0, +0.0, +0.0, +0.0, +0.0, -2.0, -4.0},
+            {-3.0, +0.0, +1.0, +1.5, +1.5, +1.0, +0.0, -3.0},
+            {-3.0, +0.5, +1.5, +2.0, +2.0, +1.5, +0.5, -3.0},
+            {-3.0, +0.0, +1.5, +2.0, +2.0, +1.5, +0.0, -3.0},
+            {-3.0, +0.5, +1.0, +1.5, +1.5, +1.0, +0.5, -3.0},
+            {-4.0, -2.0, +0.0, +0.5, +0.5, +0.0, -2.0, -4.0},
+            {-5.0, -4.0, -3.0, -3.0, -3.0, -3.0, -4.0, -5.0},
+        } };
+
+        return arr[row][column];
+    }
+};
+
+
+struct KnightWhite final :public Knight, public WhitePiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♘';
+    }
+    constexpr char symbolA() const override {
+        return 'n';
+    }
+} knightWhite;
+
+struct KnightBlack final :public Knight, public BlackPiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♞';
+    }
+    constexpr char symbolA() const override {
+        return 'N';
+    }
+} knightBlack;
+
+struct Bishop : virtual public Piece {
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override;
+
+    virtual constexpr float pricePiece() const final {
+        return 33.3;
+    }
+
+    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {-2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -2.0},
+            {-1.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -1.0},
+            {-1.0, +0.0, +0.5, +1.0, +1.0, +0.5, +0.0, -1.0},
+            {-1.0, +0.5, +0.5, +1.0, +1.0, +0.5, +0.5, -1.0},
+            {-1.0, +0.0, +1.0, +1.0, +1.0, +1.0, +0.0, -1.0},
+            {-1.0, +1.0, +1.0, +1.0, +1.0, +1.0, +1.0, -1.0},
+            {-1.0, +0.5, +0.0, +0.0, +0.0, +0.0, +0.5, -1.0},
+            {-2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -2.0},
+        } };
+
+        return arr[row][column];
+    }
+};
+struct BishopWhite final :public Bishop, public WhitePiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♗';
+    }
+    constexpr char symbolA() const override {
+        return 'b';
+    }
+} bishopWhite;
+
+struct BishopBlack final :public Bishop, public BlackPiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♝';
+    }
+    constexpr char symbolA() const override {
+        return 'B';
+    }
+} bishopBlack;
+
+
+
+struct Rook : virtual public Piece {
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override;
+
+    virtual constexpr float pricePiece() const final {
+        return 51;
+    }
+
+    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
+            {+0.5, +1.0, +1.0, +1.0, +1.0, +1.0, +1.0, +0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
+            {+0.0, +0.0, +0.0, +0.5, +0.5, +0.0, +0.0, +0.0},
+        } };
+
+        return arr[row][column];
+    }
+
+    virtual constexpr bool initialRow() const = 0;
+};
+
+struct RookWhite final :public Rook, public WhitePiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♖';
+    }
+    constexpr char symbolA() const override {
+        return 'r';
+    }
+
+    virtual constexpr bool initialRow() const {
+        return 0;
+    }
+} rookWhite;
+
+struct RookBlack final :public Rook, public BlackPiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♜';
+    }
+    constexpr char symbolA() const override {
+        return 'R';
+    }
+
+    virtual constexpr bool initialRow() const {
+        return 7;
+    }
+} rookBlack;
+
+
+struct Queen : virtual public Piece {
+
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override;
+
+    virtual constexpr float pricePiece() const final {
+        return 88;
+    }
+
+    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {-2.0, -1.0, -1.0, -0.5, -0.5, -1.0, -1.0, -2.0},
+            {-1.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -1.0},
+            {-1.0, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -1.0},
+            {-0.5, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -0.5},
+            {+0.0, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -0.5},
+            {-1.0, +0.5, +0.5, +0.5, +0.5, +0.5, +0.0, -1.0},
+            {-1.0, +0.0, +0.5, +0.0, +0.0, +0.0, +0.0, -1.0},
+            {-2.0, -1.0, -1.0, -0.5, -0.5, -1.0, -1.0, -2.0},
+        } };
+
+        return arr[row][column];
+    }
+};
+struct QueenWhite final :public Queen, public WhitePiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♕';
+    }
+    constexpr char symbolA() const override {
+        return 'q';
+    }
+} queenWhite;
+struct QueenBlack final :public Queen, public BlackPiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♛';
+    }
+    constexpr char symbolA() const override {
+        return 'Q';
+    }
+} queenBlack;
+
+
+struct King : virtual public Piece {
+    virtual double bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override;
+
+    virtual constexpr float pricePiece() const final {
+        return kingPrice;
+    }
+
+    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
+            {-2.0, -3.0, -3.0, -4.0, -4.0, -3.0, -3.0, -2.0},
+            {-1.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -1.0},
+            {+2.0, +2.0, +0.0, +0.0, +0.0, +0.0, +2.0, +2.0},
+            {+2.0, +3.0, +1.0, +0.0, +0.0, +1.0, +3.0, +2.0},
+        } };
+
+        //constexpr float tmp = arr[7][1];
+
+        return arr[row][column];
+    }
+private:
+    template <i8 rookColumn, i8 newRookColumn>
+    void tryCastling(Board& board, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, double& bestValue, i8 depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)
+    {
+        [[assume(row == 0 || row == 7)]];
+        
+        constexpr i8 kingColumn = 4;
+        constexpr i8 sign = rookColumn < kingColumn ? 1 : -1;
+        constexpr i8 newKingColumn = kingColumn - 2 * sign;
+        /*Castling is permitted only if
+    - neither the king nor the rook has previously moved;
+    - the squares between the king and the rook are vacant;
+    - the king does not leave, cross over, or finish on a square attacked by an enemy piece.
+    */
+
+        for (i8 i = rookColumn + sign; i != kingColumn; i += sign)
+        {
+            if (board.pieceAt(i, row) != nullptr) [[likely]]//The path is not vacant
+                return;
+        }
+
+        auto pieceInCorner = dynamic_cast<Rook*>(board.pieceAt(rookColumn, row));
+        if (pieceInCorner == nullptr)//The piece in the corner is not a rook or is vacant
+            return;
+
+        for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
+        {
+            if (board.canSquareBeTakenBy(i, row, oppositeSide(occupancy()))) [[unlikely]]//The path is attacked by enemy
+                {
+                    board.setPieceAt(rookColumn, row, pieceInCorner);
+                    return;
+                }
+        }
+
+        //Now we can be sure we can do the castling
+        valueSoFar -= pieceInCorner->priceAdjustmentPov(rookColumn, row);//Remove the position score of the rook, it is leaving
+        valueSoFar += pieceInCorner->priceAdjustmentPov(newRookColumn, row);//Add the score of the rook on the next position
+
+        //Castling is not allowed from this point onwards
+        bool castleLeftBackup = canICastleLeft;
+        bool castleRightBackup = canICastleRight;
+        canICastleLeft = false;
+        canICastleRight = false;
+
+        //Do the actual piece movement
+        board.setPieceAt(rookColumn, row, nullptr);
+        board.setPieceAt(newRookColumn, row, pieceInCorner);
+        tryChangeAndUpdateIfBetter(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+
+        //Revert to previous state
+        board.setPieceAt(newRookColumn, row, nullptr);
+        board.setPieceAt(rookColumn, row, pieceInCorner);
+        canICastleLeft = castleLeftBackup;
+        canICastleRight = castleRightBackup;
+    }
+};
+struct KingWhite final :public King, public WhitePiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♔';
+    }
+    constexpr char symbolA() const override {
+        return 'k';
+    }
+} kingWhite;
+struct KingBlack final :public King, public BlackPiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♚';
+    }
+    constexpr char symbolA() const override {
+        return 'K';
+    }
+} kingBlack;
+
+
+struct Pawn : virtual public Piece {
+    constexpr virtual int_fast8_t evolveRow() const = 0;
+    virtual static_vector<Piece*, 4>* evolveIntoReference(int_fast8_t row) const = 0;
+    constexpr virtual int_fast8_t advanceRow() const = 0;
+    constexpr virtual bool canGoTwoFields(int_fast8_t row) const = 0;
+
+    constexpr float pricePiece() const final
+    {
+        return 10;
+    }
+    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
+    {
+        assert(column < 8 && row < 8);
+        constexpr std::array<std::array<float, 8>, 8> arr = { {
+            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
+            {+5.0, +5.0, +5.0, +5.0, +5.0, +5.0, +5.0, +5.0},
+            {+1.0, +1.0, +2.0, +3.0, +3.0, +2.0, +1.0, +1.0},
+            {+0.5, +0.5, +1.0, +2.5, +2.5, +1.0, +0.5, +0.5},
+            {+0.0, +0.0, +0.0, +2.0, +2.0, +0.0, +0.0, +0.0},
+            {+0.5, -0.5, -1.0, +0.0, +0.0, -1.0, -0.5, +0.5},
+            {+0.5, +1.0, +1.0, -2.0, -2.0, +1.0, +1.0, +0.5},
+            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
+        } };
+
+        return arr[row][column];
+    }
+    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override;
+};
+
+struct PawnWhite final :public Pawn, public WhitePiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♙';
+    }
+    constexpr int_fast8_t evolveRow() const override {
+        return 7;
+    }
+
+    constexpr bool canGoTwoFields(int_fast8_t row) const override {
+        return row == 1;
+    }
+
+    constexpr int_fast8_t advanceRow() const override {
+        return 1;
+    }
+
+    constexpr char symbolA() const override {
+        return 'p';
+    }
+
+    virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const override
+    {
+        static static_vector<Piece*, 4> whiteEvolvePawnOnly{ &pawnWhite };
+        static static_vector<Piece*, 4> whiteEvolveLastRow{ &queenWhite, &rookWhite, &bishopWhite, &knightWhite };
+        if (row == evolveRow()) [[unlikely]]
+            return &whiteEvolveLastRow;
+        else [[likely]]
+            return &whiteEvolvePawnOnly;
+    }
+
+} pawnWhite;
+struct PawnBlack final :public Pawn, public BlackPiece {
+    constexpr wchar_t symbolW() const override {
+        return L'♟';
+    }
+    constexpr int_fast8_t evolveRow() const override {
+        return 0;
+    }
+
+    bool canGoTwoFields(int_fast8_t row) const override {
+        return row == 6;
+    }
+    int_fast8_t advanceRow() const override {
+        return -1;
+    }
+
+    constexpr char symbolA() const override {
+        return 'P';
+    }
+
+    virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const override
+    {
+        static static_vector<Piece*, 4> blackEvolvePawnOnly{ &pawnBlack };
+        static static_vector<Piece*, 4> blackEvolveLastRow{ &queenBlack, &rookBlack, &bishopBlack, &knightBlack };
+        if (row == evolveRow()) [[unlikely]]
+            return &blackEvolveLastRow;
+        else [[likely]]
+            return &blackEvolvePawnOnly;
+    }
+
+} pawnBlack;
+
+
+
+
 struct GameMove {
     Board researchedBoard;
     double bestFoundValue;
@@ -726,23 +1218,24 @@ static std::vector<GameMove> firstPositions;
 
 
 
-void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, double valueSoFar, Piece* changeInto, double minPriceToTake, double maxPriceToTake)
+void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, double& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, double valueSoFar, double minPriceToTake, double maxPriceToTake)
 {
     if (doNotContinue && !dynamicPositionRanking)
         return;
 
     double price = board.priceInLocation(column, row, occupancy());
 
-    //uint_fast16_t moves = 0;
 
     if (price >= minPriceToTake && price <= maxPriceToTake)
     {
-        if (changeInto == nullptr)
-            changeInto = this;
-        //int test = totalMoves;
+        //if (changeInto == nullptr) [[likely]]
+        //    changeInto = this;
+
         totalMoves += 1;
         
         totalValues += price * occupancy();
+
+        valueSoFar += priceAdjustmentPov(column, row) * occupancy(); //We are entering new position with this piece
 
         if (saveToVector && depth==0) [[unlikely]]
         {
@@ -750,12 +1243,13 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fas
             //if (changeInto == nullptr)
             //    changeInto = this;
             Piece* backup = board.pieceAt(column, row);
-            board.setPieceAt(column, row, changeInto);
+            board.setPieceAt(column, row, this);
 
             saveToVector = false;
             if (board.isValidSetup())
             {
                 //double pieceTakenValue = valueSoFar + price * occupancy();
+                //board.print();
                 float balance = board.balance();
                 firstPositions.emplace_back(board, balance);
             }
@@ -795,7 +1289,7 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fas
 
             if (depth > 0)
             {
-                double foundOnly = board.tryPiece(column, row, changeInto, depth, alpha, beta, valueWithThisPiece);
+                double foundOnly = board.tryPiece(column, row, this, depth, alpha, beta, valueWithThisPiece);
 
 
                 foundVal = foundOnly;
@@ -810,8 +1304,8 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fas
             else//konec tady, list
             {
                 foundVal = valueWithThisPiece;
-                if (dynamicPositionRanking)
-                    foundVal += board.tryPiecePosition(column, row, changeInto);
+                //if (dynamicPositionRanking)
+                //    foundVal += board.tryPiecePosition(column, row, changeInto);
             }
 
 
@@ -844,760 +1338,395 @@ void Piece::tryChangeAndUpdateIfBetter(Board& board, int_fast8_t column, int_fas
 }
 
 
-struct Pawn : virtual public Piece {
-    //virtual bool canBeEvolved(char row) const = 0;
-    constexpr virtual int_fast8_t evolveRow() const = 0;
+double Pawn::bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)
+{
+    double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
 
-    virtual static_vector<Piece*,4>* evolveIntoReference(int_fast8_t row) const = 0;
+    uint_fast16_t moves = 0;
 
-    constexpr virtual int_fast8_t advanceRow() const = 0;
+    auto availableOptions = evolveIntoReference(row + advanceRow());
 
-    constexpr virtual bool canGoTwoFields(int_fast8_t row) const = 0;
+    board.setPieceAt(column, row, nullptr);
+    valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
-    //virtual double priceRelative(int_fast8_t relativeRowDistanceFromStart) const {
+    board.playerOnMove = oppositeSide(board.playerOnMove);
 
-    //    if (relativeRowDistanceFromStart >= 5)
-    //        return 1.000001;
-    //    return 1;
-    //    //return 1;
-    //    //switch (relativeRowDistanceFromStart) {
-    //    ////case 4:
-    //    //  //  return 1.1;
-    //    //case 5:
-    //    //    return 1.25;
-    //    //case 6:
-    //    //    return 2;
-    //    //case 7:
-    //    //    return 3;
-    //    //default:
-    //    //    return 1;
-
-    //    //}
-    //}
-
-    constexpr float pricePiece() const final
+    if (board.priceInLocation(column, row + advanceRow(), occupancy()) == 0)//Muzu jit pescem o jedno dopredu
     {
-        return 10;
-    }
-    
-
-    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
-    {
-        assert(column < 8 && row < 8);
-        constexpr std::array<std::array<float, 8>, 8> arr = { {
-            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
-            {+5.0, +5.0, +5.0, +5.0, +5.0, +5.0, +5.0, +5.0},
-            {+1.0, +1.0, +2.0, +3.0, +3.0, +2.0, +1.0, +1.0},
-            {+0.5, +0.5, +1.0, +2.5, +2.5, +1.0, +0.5, +0.5},
-            {+0.0, +0.0, +0.0, +2.0, +2.0, +0.0, +0.0, +0.0},
-            {+0.5, -0.5, -1.0, +0.0, +0.0, -1.0, -0.5, +0.5},
-            {+0.5, +1.0, +1.0, -2.0, -2.0, +1.0, +1.0, +0.5},
-            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
-        } };
-
-        return arr[row][column];
-    }
-
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override
-    {
-        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
-
-        uint_fast16_t moves = 0;
-
-        auto availableOptions = evolveIntoReference(row + advanceRow());
-
-
-        board.setPieceAt(column, row, nullptr);
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-
-        if (board.priceInLocation(column, row + advanceRow(), occupancy()) == 0)//Muzu jit pescem o jedno dopredu
+        if (canGoTwoFields(row))//Two fields forward
         {
-
-            for (const auto& evolveOption : *availableOptions) {
-                //One field forward
-                {
-                    double valueDifferenceNextMove = (evolveOption->price(column, row + advanceRow()) - price(column, row)) * occupancy();
-                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, 0, 0);
-                }
-                if (canGoTwoFields(row))//Two fields forward
-                {
-                    double valueDifferenceNextMove = (evolveOption->price(column, row + advanceRow() * 2) - price(column, row)) * occupancy();
-                    tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, 0, 0);
-                }
-
-            }
+            tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, 0, 0);
         }
         for (const auto& evolveOption : *availableOptions) {
-            if(column<7)
+            double valueDifferenceNextMove = (evolveOption->pricePiece() - pricePiece()) * occupancy();
+            //One field forward
             {
-                double valueDifferenceNextMove = (evolveOption->price(column + 1, row + advanceRow()) - price(column, row)) * occupancy();
-                tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, DBL_MIN);
-            }
-            if(column>0)
-            {
-                double valueDifferenceNextMove = (evolveOption->price(column - 1, row + advanceRow()) - price(column, row)) * occupancy();
-                tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, evolveOption, DBL_MIN);
+                evolveOption->tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, 0, 0);
             }
         }
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        board.setPieceAt(column, row, this);
-        
-
-        return bestValue;
     }
-
-};
-
-
-struct Knight : virtual public Piece {
-
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
-
-        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
-
-        //if (depth <= 0)
-          //  return 0;
-        board.setPieceAt(column, row, nullptr);
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-
-        tryChangeAndUpdateIfBetter(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        board.setPieceAt(column, row, this);
-
-        return bestValue;
-    }
-
-
-    virtual constexpr float pricePiece() const final {
-        return 32;
-    }
-
-    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
-    {
-        assert(column < 8 && row < 8);
-        constexpr std::array<std::array<float, 8>, 8> arr = { {
-            {-5.0, -4.0, -3.0, -3.0, -3.0, -3.0, -4.0, -5.0},
-            {-4.0, -2.0, +0.0, +0.0, +0.0, +0.0, -2.0, -4.0},
-            {-3.0, +0.0, +1.0, +1.5, +1.5, +1.0, +0.0, -3.0},
-            {-3.0, +0.5, +1.5, +2.0, +2.0, +1.5, +0.5, -3.0},
-            {-3.0, +0.0, +1.5, +2.0, +2.0, +1.5, +0.0, -3.0},
-            {-3.0, +0.5, +1.0, +1.5, +1.5, +1.0, +0.5, -3.0},
-            {-4.0, -2.0, +0.0, +0.5, +0.5, +0.0, -2.0, -4.0},
-            {-5.0, -4.0, -3.0, -3.0, -3.0, -3.0, -4.0, -5.0},
-        } };
-
-        return arr[row][column];
-    }
-};
-
-
-struct Bishop : virtual public Piece {
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue)  override {
-
-        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
-        //if (depth <= 0)
-          //  return 0;
-
-        board.setPieceAt(column, row, nullptr);
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        //bool foundKing = false;
-
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column + i, row + i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
+    for (const auto& evolveOption : *availableOptions) {
+        if (column < 7)
+        {
+            double valueDifferenceNextMove = (evolveOption->price(column + 1, row + advanceRow()) - price(column, row)) * occupancy();
+            evolveOption->tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, DBL_MIN);
         }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column + i, row - i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
+        if (column > 0)
+        {
+            double valueDifferenceNextMove = (evolveOption->price(column - 1, row + advanceRow()) - price(column, row)) * occupancy();
+            evolveOption->tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, DBL_MIN);
         }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column - i, row + i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column - i, row - i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        board.setPieceAt(column, row, this);
-
-
-        return bestValue;
     }
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+    board.setPieceAt(column, row, this);
 
-    virtual constexpr float pricePiece() const final {
-        return 33.3;
-    }
 
-    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
-    {
-        assert(column < 8 && row < 8);
-        constexpr std::array<std::array<float, 8>, 8> arr = { {
-            {-2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -2.0},
-            {-1.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -1.0},
-            {-1.0, +0.0, +0.5, +1.0, +1.0, +0.5, +0.0, -1.0},
-            {-1.0, +0.5, +0.5, +1.0, +1.0, +0.5, +0.5, -1.0},
-            {-1.0, +0.0, +1.0, +1.0, +1.0, +1.0, +0.0, -1.0},
-            {-1.0, +1.0, +1.0, +1.0, +1.0, +1.0, +1.0, -1.0},
-            {-1.0, +0.5, +0.0, +0.0, +0.0, +0.0, +0.5, -1.0},
-            {-2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -2.0},
-        } };
-
-        return arr[row][column];
-    }
-};
-
-
-struct Rook : virtual public Piece {
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
-
-        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
-
-        board.setPieceAt(column, row, nullptr);
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column, row + i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column, row - i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column + i, row, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column - i, row, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        board.setPieceAt(column, row, this);
-
-        return bestValue;
-    }
-
-    virtual constexpr float pricePiece() const final {
-        return 51;
-    }
-
-    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
-    {
-        assert(column < 8 && row < 8);
-        constexpr std::array<std::array<float, 8>, 8> arr = { {
-            {+0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0},
-            {+0.5, +1.0, +1.0, +1.0, +1.0, +1.0, +1.0, +0.5},
-            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
-            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
-            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
-            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
-            {-0.5, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -0.5},
-            {+0.0, +0.0, +0.0, +0.5, +0.5, +0.0, +0.0, +0.0},
-        } };
-
-        return arr[row][column];
-    }
-};
-
-
-struct Queen : virtual public Piece {
-
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
-        //researchedBoard.print();
-
-        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
-
-
-        Piece* originalPiece = board.pieceAt(column, row);
-        board.setPieceAt(column, row, nullptr);
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-
-
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column + i, row + i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column + i, row - i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column - i, row + i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column - i, row - i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column, row + i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column, row - i, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column + i, row, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-
-        for (int_fast8_t i = 1; i < 8; ++i) {
-            double price = board.priceInLocation(column - i, row, occupancy());
-            if (price >= 0)
-            {
-                tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-                if (price > 0)
-                    break;
-            }
-            else
-                break;
-        }
-
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        board.setPieceAt(column, row, this);
-
-        return bestValue;
-    }
-
-
-    virtual constexpr float pricePiece() const final {
-        return 88;
-    }
-
-    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
-    {
-        assert(column < 8 && row < 8);
-        constexpr std::array<std::array<float, 8>, 8> arr = { {
-            {-2.0, -1.0, -1.0, -0.5, -0.5, -1.0, -1.0, -2.0},
-            {-1.0, +0.0, +0.0, +0.0, +0.0, +0.0, +0.0, -1.0},
-            {-1.0, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -1.0},
-            {-0.5, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -0.5},
-            {+0.0, +0.0, +0.5, +0.5, +0.5, +0.5, +0.0, -0.5},
-            {-1.0, +0.5, +0.5, +0.5, +0.5, +0.5, +0.0, -1.0},
-            {-1.0, +0.0, +0.5, +0.0, +0.0, +0.0, +0.0, -1.0},
-            {-2.0, -1.0, -1.0, -0.5, -0.5, -1.0, -1.0, -2.0},
-        } };
-
-        return arr[row][column];
-    }
-};
-
-struct King : virtual public Piece {
-    virtual double bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) override {
-        double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
-
-        board.setPieceAt(column, row, nullptr);
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-
-        tryChangeAndUpdateIfBetter(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-        tryChangeAndUpdateIfBetter(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        board.setPieceAt(column, row, this);
-
-        return bestValue;
-
-    }
-
-    virtual constexpr float pricePiece() const final {
-        return kingPrice;
-    }
-
-    //double price(char column, char row) const override {
-
-    //    return kingPrice;
-    //}
-
-    constexpr float priceAdjustment(int_fast8_t column, int_fast8_t row) const final
-    {
-        assert(column < 8 && row < 8);
-        constexpr std::array<std::array<float, 8>, 8> arr = {{
-            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
-            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
-            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
-            {-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4.0, -3.0},
-            {-2.0, -3.0, -3.0, -4.0, -4.0, -3.0, -3.0, -2.0},
-            {-1.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -1.0},
-            {+2.0, +2.0, +0.0, +0.0, +0.0, +0.0, +2.0, +2.0},
-            {+2.0, +3.0, +1.0, +0.0, +0.0, +1.0, +3.0, +2.0},
-        }};
-
-        //constexpr float tmp = arr[7][1];
-        
-        return arr[row][column];
-    }
-};
-
-struct WhitePiece : virtual Piece {
-    constexpr PlayerSide occupancy() const final {
-        return PlayerSide::WHITE;
-    }
-    constexpr float price(int_fast8_t column, int_fast8_t row) const final {
-        return pricePiece() + priceAdjustment(column, 7-row);
-    }
-};
-struct BlackPiece : virtual Piece {
-    constexpr PlayerSide occupancy() const final {
-        return PlayerSide::BLACK;
-    }
-    constexpr float price(int_fast8_t column, int_fast8_t row) const final {
-        return pricePiece() + priceAdjustment(7-column, row);
-    }
-};
-
-struct KnightWhite final :public Knight, public WhitePiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♘';
-    }
-
-    //Piece* clone() const override {
-    //    return new KnightWhite(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'n';
-    }
-} knightWhite;
-
-struct KnightBlack final :public Knight, public BlackPiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♞';
-    }
-    //Piece* clone() const override {
-    //    return new KnightBlack(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'N';
-    }
-} knightBlack;
-
-struct BishopWhite final :public Bishop, public WhitePiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♗';
-    }
-    //Piece* clone() const override {
-    //    return new BishopWhite(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'b';
-    }
-} bishopWhite;
-
-struct BishopBlack final :public Bishop, public BlackPiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♝';
-    }
-    //Piece* clone() const override {
-    //    return new BishopBlack(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'B';
-    }
-} bishopBlack;
-
-struct RookWhite final :public Rook, public WhitePiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♖';
-    }
-    //Piece* clone() const override {
-    //    return new RookWhite(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'r';
-    }
-} rookWhite;
-
-struct RookBlack final :public Rook, public BlackPiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♜';
-    }
-    //Piece* clone() const override {
-    //    return new RookBlack(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'R';
-    }
-} rookBlack;
-struct QueenWhite final :public Queen, public WhitePiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♕';
-    }
-    //Piece* clone() const override {
-    //    return new QueenWhite(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'q';
-    }
-} queenWhite;
-struct QueenBlack final :public Queen, public BlackPiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♛';
-    }
-    //Piece* clone() const override {
-    //    return new QueenBlack(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'Q';
-    }
-} queenBlack;
-struct KingWhite final :public King, public WhitePiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♔';
-    }
-    //Piece* clone() const override {
-    //    return new KingWhite(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'k';
-    }
-} kingWhite;
-struct KingBlack final :public King, public BlackPiece {
-    //char occupancy() const override {
-    //    return -1;
-    //}
-    constexpr wchar_t symbolW() const override {
-        return L'♚';
-    }
-    //Piece* clone() const override {
-    //    return new KingBlack(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'K';
-    }
-} kingBlack;
-
-
-struct PawnWhite final :public Pawn, public WhitePiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♙';
-    }
-    constexpr int_fast8_t evolveRow() const override {
-        return 7;
-    }
-
-    /*bool canBeEvolved(char row) const override{
-        return row=='8';
-    }*/
-
-    constexpr bool canGoTwoFields(int_fast8_t row) const override {
-        return row == 1;
-    }
-
-    constexpr int_fast8_t advanceRow() const override {
-        return 1;
-    }
-
-    //Piece* clone() const override {
-    //    return new PawnWhite(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'p';
-    }
-
-
-    //double price(char row) const override {
-    //    return priceRelative(row - '0');
-    //    ////return 1;
-    //    //switch (row) {
-    //    //case '5':
-    //    //    return 1.5;
-    //    //case '6':
-    //    //    return 2;
-    //    //case '7':
-    //    //    return 3;
-    //    //default:
-    //    //    return 1;
-
-    //    //}
-    //}
-    virtual static_vector<Piece*,4>* evolveIntoReference(int_fast8_t row) const;
-
-} pawnWhite;
-struct PawnBlack final:public Pawn, public BlackPiece {
-    constexpr wchar_t symbolW() const override {
-        return L'♟';
-    }
-    int_fast8_t evolveRow() const override {
-        return 0;
-    }
-    /*bool canBeEvolved(char row) const override{
-        return row=='1';
-    }*/
-    bool canGoTwoFields(int_fast8_t row) const override {
-        return row == 6;
-    }
-    int_fast8_t advanceRow() const override {
-        return -1;
-    }
-
-    //Piece* clone() const override {
-    //    return new PawnBlack(*this);
-    //}
-    constexpr char symbolA() const override {
-        return 'P';
-    }
-
-    //double price(char row) const override {
-    //    return priceRelative('9'- row);
-    //    ////return 1;
-    //    //switch (row) {
-    //    //case '4':
-    //    //    return 1.5;
-    //    //case '3':
-    //    //    return 2;
-    //    //case '2':
-    //    //    return 3;
-    //    //default:
-    //    //    return 1;
-
-    //    //}
-    //}
-
-    virtual static_vector<Piece*,4>* evolveIntoReference(int_fast8_t row) const;
-
-} pawnBlack;
-
-static_vector<Piece*,4> whiteEvolvePawnOnly = { &pawnWhite };
-static_vector<Piece*,4> whiteEvolveLastRow = { &queenWhite, &rookWhite, &bishopWhite, &knightWhite };
-static_vector<Piece*,4> blackEvolvePawnOnly = { &pawnBlack };
-static_vector<Piece*,4> blackEvolveLastRow = { &queenBlack, &rookBlack, &bishopBlack, &knightBlack };
-
-static_vector<Piece*,4>* PawnWhite::evolveIntoReference(int_fast8_t row) const {
-    if (row == evolveRow()) [[unlikely]]
-        return &whiteEvolveLastRow;
-    else [[likely]]
-        return &whiteEvolvePawnOnly;
+    return bestValue;
 }
 
-static_vector<Piece*,4>* PawnBlack::evolveIntoReference(int_fast8_t row) const {
-    if (row == evolveRow()) [[unlikely]]
-        return &blackEvolveLastRow;
-    else [[likely]]
-        return &blackEvolvePawnOnly;
+
+double Knight::bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) {
+
+    double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
+
+    //if (depth <= 0)
+      //  return 0;
+    board.setPieceAt(column, row, nullptr);
+    valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+
+    tryChangeAndUpdateIfBetter(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+    board.setPieceAt(column, row, this);
+
+    return bestValue;
 }
+
+double Bishop::bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) {
+
+    double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
+    //if (depth <= 0)
+      //  return 0;
+
+    board.setPieceAt(column, row, nullptr);
+    valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+    //bool foundKing = false;
+
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column + i, row + i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column + i, row - i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column - i, row + i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column - i, row - i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+    board.setPieceAt(column, row, this);
+
+
+    return bestValue;
+}
+
+double Rook::bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) {
+
+    double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
+
+    board.setPieceAt(column, row, nullptr);
+    valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+
+    bool castleLeftBackup;
+    bool castleRightBackup;
+
+    if (initialRow() == row)
+    {
+        if (column == 0)
+        {
+            bool& canICastleLeft = board.canCastleLeft[(occupancy() + 1) / 2];
+            castleLeftBackup = canICastleLeft;
+            canICastleLeft = false;
+        }
+        else if (column == 7)
+        {
+            bool& canICastleRight = board.canCastleRight[(occupancy() + 1) / 2];
+            castleRightBackup = canICastleRight;
+            canICastleRight = false;
+        }
+    }
+
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column, row + i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column, row - i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column + i, row, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column - i, row, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+
+    if (initialRow() == row)
+    {
+        if (column == 0)
+        {
+            bool& canICastleLeft = board.canCastleLeft[(occupancy() + 1) / 2];
+            canICastleLeft = castleLeftBackup;
+        }
+        else if (column == 7)
+        {
+            bool& canICastleRight = board.canCastleRight[(occupancy() + 1) / 2];
+            canICastleRight = castleRightBackup;
+        }
+    }
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+    board.setPieceAt(column, row, this);
+
+    return bestValue;
+}
+
+double Queen::bestMoveWithThisPieceScore(Board& board, int_fast8_t column, int_fast8_t row, int_fast8_t depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) {
+    double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
+
+    Piece* originalPiece = board.pieceAt(column, row);
+    board.setPieceAt(column, row, nullptr);
+    valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+
+
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column + i, row + i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column + i, row - i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column - i, row + i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column - i, row - i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column, row + i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column, row - i, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column + i, row, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+
+    for (int_fast8_t i = 1; i < 8; ++i) {
+        double price = board.priceInLocation(column - i, row, occupancy());
+        if (price >= 0)
+        {
+            tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            if (price > 0)
+                break;
+        }
+        else
+            break;
+    }
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+    board.setPieceAt(column, row, this);
+
+    return bestValue;
+}
+
+double King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, double& alpha, double& beta, i32& totalMoves, double& totalValues, double valueSoFar, bool doNoContinue) {
+    double bestValue = std::numeric_limits<double>::infinity() * (-1) * occupancy();
+
+    board.setPieceAt(column, row, nullptr);
+    valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+
+    bool& canICastleLeft = board.canCastleLeft[(occupancy() + 1) / 2];
+    bool& canICastleRight = board.canCastleLeft[(occupancy() + 1) / 2];
+
+    bool castleLeftBackup = canICastleLeft;
+    bool castleRightBackup = canICastleRight;
+
+    canICastleLeft = false;
+    canICastleRight = false;
+
+    tryChangeAndUpdateIfBetter(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryChangeAndUpdateIfBetter(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+
+    canICastleLeft = castleLeftBackup;
+    canICastleRight = castleRightBackup;
+
+#ifndef CASTLING_DISABLED
+    if (canICastleLeft)//Neither has moved
+    {
+        assert(column == 4);//King has to be in initial position
+        assert(row == 0 || row == 7);
+        tryCastling<0, 3>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, totalValues, valueSoFar, doNoContinue);
+    }
+    if (canICastleRight)//Neither has moved
+    {
+        assert(column == 4);//King has to be in initial position
+        assert(row == 0 || row == 7);
+        tryCastling<7, 5>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, totalValues, valueSoFar, doNoContinue);
+    }
+#endif
+
+    board.playerOnMove = oppositeSide(board.playerOnMove);
+    board.setPieceAt(column, row, this);
+
+    return bestValue;
+}
+
+
+static std::atomic<double> alphaOrBeta;
 
 template<typename T>
 inline void update_max(std::atomic<T>& atom, const T val)
@@ -1611,7 +1740,6 @@ inline void update_min(std::atomic<T>& atom, const T val)
     for (T atom_val = atom; atom_val > val && atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
 }
 
-static std::atomic<double> alphaOrBeta;
 
 //template <typename T>
 //void printGeneralInfo(T& o)
@@ -2639,6 +2767,21 @@ int main(int argc, char** argv) {
                 testMatu.print();
 
                 benchmark(8, testMatu);
+            } break;
+            case (4):
+            {
+                Board test = startingPosition();
+
+                test.deleteAndOverwritePiece('b', '1', nullptr);
+                test.deleteAndOverwritePiece('c', '1', nullptr);
+                test.deleteAndOverwritePiece('d', '1', nullptr);
+                test.deleteAndOverwritePiece('f', '1', nullptr);
+                test.deleteAndOverwritePiece('g', '1', nullptr);
+
+                test.playerOnMove = PlayerSide::WHITE;
+                test.print();
+
+                benchmark(8, test);
             } break;
 
             default:
