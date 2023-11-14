@@ -118,10 +118,14 @@ struct Piece {
 
     //virtual constexpr i8 initialRow() const = 0;
 
-    constexpr float price(i8 column, i8 row) const {
+    constexpr float priceAbsolute(i8 column, i8 row) const {
         auto res = pricePiece() + priceAdjustmentPov(column, row);
         [[assume (res >= 0)]]
         return res;
+    }
+
+    constexpr float priceRelative(i8 column, i8 row) const {
+        return priceAbsolute(column,row) * occupancy();
     }
 
     virtual constexpr float pricePiece() const = 0;
@@ -472,18 +476,17 @@ public:
     float priceInLocation(i8 column, i8 row, PlayerSide playerColor) const
     {
         if (column < 0 || column > 7 || row < 0 || row > 7)
-            return -1;
+            return -std::numeric_limits<float>::infinity();
 
         //i8 index = (column - 'a') + ((row - '1') * 8);
         const auto& piece = pieces[column + (row * 8)];
 
+        [[assume(playerColor == PlayerSide::Black || playerColor == PlayerSide::White)]];
 
         if (piece == nullptr)
             return 0;
-        if (piece->occupancy() == playerColor)
-            return -1;
         else
-            return piece->price(column,row);
+            return piece->priceRelative(column, row) * (-playerColor);
     }
 
     Piece* pieceAt(i8 column, i8 row)
@@ -662,7 +665,7 @@ public:
         double res = 0;
         for (i8 i = 0; i < 64; ++i) {
             if (pieces[i] != nullptr)// && pieces[i]->pricePiece()!=kingPrice)
-                res += pieces[i]->price(i % 8, i / 8) * pieces[i]->occupancy();
+                res += pieces[i]->priceRelative(i % 8, i / 8);
         }
 
         return res;
@@ -1275,7 +1278,7 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
         saveToVector = false;
         if (board.isValidSetup())
         {
-            //float pieceTakenValue = valueSoFar + price * occupancy();
+            //float pieceTakenValue = valueSoFar + priceAbsolute * occupancy();
             //board.print();
             float balance = board.balance();
             firstPositions.emplace_back(board, balance);
@@ -1307,7 +1310,7 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
         }
 
         float foundVal = 0;
-        float valueWithThisPiece = valueSoFar + (price * occupancy());//price * occupancy();
+        float valueWithThisPiece = valueSoFar + (price * occupancy());//priceAbsolute * occupancy();
 
 
         //if (changeInto == nullptr)
