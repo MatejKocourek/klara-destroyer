@@ -36,6 +36,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <functional>
 
 #define out std::cout
 #define nl '\n'
@@ -79,6 +80,10 @@ static constexpr float kingPrice = 20000;
 static constexpr float matePrice = 10000000;
 static constexpr float stalePrice = 50000;
 
+#define MOVE_PIECE_FREE_ONLY std::equal_to<float>()
+#define MOVE_PIECE_CAPTURE_ONLY std::greater<float>()
+#define MOVE_PIECE_FREE_CAPTURE std::greater_equal<float>()
+
 enum PlayerSide : i8
 {
     WHITE = 1,
@@ -111,8 +116,12 @@ struct Piece {
 
     virtual constexpr PlayerSide occupancy() const = 0;
 
+    //virtual constexpr i8 initialRow() const = 0;
+
     constexpr float price(i8 column, i8 row) const {
-        return pricePiece() + priceAdjustmentPov(column, row);
+        auto res = pricePiece() + priceAdjustmentPov(column, row);
+        [[assume (res >= 0)]]
+        return res;
     }
 
     virtual constexpr float pricePiece() const = 0;
@@ -132,7 +141,15 @@ struct Piece {
 
     virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNotContinue = false) = 0;
 
-    void tryChangeAndUpdateIfBetter(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float minPriceToTake = 0, float maxPriceToTake = std::numeric_limits<float>::max());
+    void placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price);
+
+    template <typename F>
+    bool tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition);
+
+    auto tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar)
+    {
+        return tryPlacingPieceAt(board, column, row, depth, alpha, beta, bestValue, totalValues, totalMoves, doNotContinue, valueSoFar, MOVE_PIECE_FREE_CAPTURE);
+    }
 
     virtual ~Piece() = default;
 };
@@ -189,6 +206,10 @@ struct BaitBlack final : public Bait
     {
         return PlayerSide::BLACK;
     }
+    //constexpr i8 initialRow() const final
+    //{
+    //    throw;
+    //}
 } baitBlack;
 
 struct BaitWhite final : public Bait
@@ -197,6 +218,10 @@ struct BaitWhite final : public Bait
     {
         return PlayerSide::WHITE;
     }
+    //constexpr i8 initialRow() const final
+    //{
+    //    throw;
+    //}
 } baitWhite;
 
 
@@ -1059,7 +1084,7 @@ private:
         //Do the actual piece movement
         board.setPieceAt(rookColumn, row, nullptr);
         board.setPieceAt(newRookColumn, row, pieceInCorner);
-        tryChangeAndUpdateIfBetter(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
         //Revert to previous state
         board.setPieceAt(newRookColumn, row, nullptr);
@@ -1089,6 +1114,7 @@ struct KingBlack final :public King, public BlackPiece {
 struct Pawn : virtual public Piece {
     constexpr virtual i8 evolveRow() const = 0;
     virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const = 0;
+    virtual const std::array<Piece*, 4>& availablePromotes() const = 0;
     constexpr virtual i8 advanceRow() const = 0;
     constexpr virtual bool canGoTwoFields(i8 row) const = 0;
 
@@ -1144,6 +1170,11 @@ struct PawnWhite final :public Pawn, public WhitePiece {
         else [[likely]]
             return &whiteEvolvePawnOnly;
     }
+    const std::array<Piece*, 4>& availablePromotes() const override
+    {
+        static std::array<Piece*, 4> whiteEvolveLastRow{ &queenWhite, &rookWhite, &bishopWhite, &knightWhite };
+        return whiteEvolveLastRow;
+    }
 
 } pawnWhite;
 struct PawnBlack final :public Pawn, public BlackPiece {
@@ -1173,6 +1204,12 @@ struct PawnBlack final :public Pawn, public BlackPiece {
             return &blackEvolveLastRow;
         else [[likely]]
             return &blackEvolvePawnOnly;
+    }
+
+    const std::array<Piece*, 4>& availablePromotes() const override
+    {
+        static std::array<Piece*, 4> blackEvolveLastRow{ &queenBlack, &rookBlack, &bishopBlack, &knightBlack };
+        return blackEvolveLastRow;
     }
 
 } pawnBlack;
@@ -1217,124 +1254,123 @@ struct GameMove {
 static std::vector<GameMove> firstPositions;
 
 
+void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price)
+{
+    //if (changeInto == nullptr) [[likely]]
+        //    changeInto = this;
 
-void Piece::tryChangeAndUpdateIfBetter(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float minPriceToTake, float maxPriceToTake)
+    totalMoves += 1;
+
+    totalValues += price * occupancy();
+
+    valueSoFar += priceAdjustmentPov(column, row) * occupancy(); //We are entering new position with this piece
+
+    if (saveToVector && depth == 0) [[unlikely]]
+    {
+        //if (changeInto == nullptr)
+        //    changeInto = this;
+        Piece* backup = board.pieceAt(column, row);
+        board.setPieceAt(column, row, this);
+
+        saveToVector = false;
+        if (board.isValidSetup())
+        {
+            //float pieceTakenValue = valueSoFar + price * occupancy();
+            //board.print();
+            float balance = board.balance();
+            firstPositions.emplace_back(board, balance);
+        }
+        board.setPieceAt(column, row, backup);
+
+        saveToVector = true;
+        return;
+    }
+
+    //if (doNotContinue) [[unlikely]]
+    //    return;
+
+    if (price >= kingPrice - 50) [[unlikely]]//Je možné vzít krále
+    {
+        doNotContinue = true;
+        bestValue = kingPrice * occupancy();
+        //totalMoves++;
+        //return;
+
+    }
+    else [[likely]]
+    {
+        if (!(price == 0 || price == -0))
+        {
+            //const i8 howFarFromInitial = (depthW - depth);
+            const float howFarFromInitialAfterExchange = ((depthW - depth) / 2);//Kolikaty tah od initial pozice (od 0), ne pultah
+            price /= (1 + howFarFromInitialAfterExchange / 100.0);
+        }
+
+        float foundVal = 0;
+        float valueWithThisPiece = valueSoFar + (price * occupancy());//price * occupancy();
+
+
+        //if (changeInto == nullptr)
+        //    changeInto = this;
+
+
+        if (depth > 0)
+        {
+            float foundOnly = board.tryPiece(column, row, this, depth, alpha, beta, valueWithThisPiece);
+
+
+            foundVal = foundOnly;
+
+            if ((foundOnly * occupancy() * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
+            {
+                //if (foundVal > 0)
+                totalMoves -= 1;
+                return;
+            }
+        }
+        else//konec tady, list
+        {
+            foundVal = valueWithThisPiece;
+            //if (dynamicPositionRanking)
+            //    foundVal += board.tryPiecePosition(column, row, changeInto);
+        }
+
+
+        if (foundVal * occupancy() > bestValue * occupancy())
+            bestValue = foundVal;
+    }
+
+    switch (occupancy())
+    {
+    case(PlayerSide::WHITE): {
+        alpha = std::max(alpha, bestValue);//bily maximalizuje hodnotu
+    } break;
+    case(PlayerSide::BLACK): {
+        beta = std::min(beta, bestValue);
+    } break;
+    default:
+        std::unreachable();
+    }
+
+    doNotContinue |= (beta <= alpha);
+}
+
+
+template <typename F>
+bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition)
 {
     if (doNotContinue && !dynamicPositionRanking)
-        return;
+        return false;
 
     float price = board.priceInLocation(column, row, occupancy());
 
-
-    if (price >= minPriceToTake && price <= maxPriceToTake)
+    if (condition(price, 0))
     {
-        //if (changeInto == nullptr) [[likely]]
-        //    changeInto = this;
-
-        totalMoves += 1;
-        
-        totalValues += price * occupancy();
-
-        valueSoFar += priceAdjustmentPov(column, row) * occupancy(); //We are entering new position with this piece
-
-        if (saveToVector && depth==0) [[unlikely]]
-        {
-
-            //if (changeInto == nullptr)
-            //    changeInto = this;
-            Piece* backup = board.pieceAt(column, row);
-            board.setPieceAt(column, row, this);
-
-            saveToVector = false;
-            if (board.isValidSetup())
-            {
-                //float pieceTakenValue = valueSoFar + price * occupancy();
-                //board.print();
-                float balance = board.balance();
-                firstPositions.emplace_back(board, balance);
-            }
-            board.setPieceAt(column, row, backup);
-
-            saveToVector = true;
-            return;
-        }
-
-        if (doNotContinue)
-            return;
-
-        if (price >= kingPrice-50) [[unlikely]]//Je možné vzít krále
-        {
-            doNotContinue = true;
-            bestValue = kingPrice * occupancy();
-            //totalMoves++;
-            //return;
-
-        }
-        else
-        {
-            if (!(price == 0 || price == -0))
-            {
-                //const i8 howFarFromInitial = (depthW - depth);
-                const float howFarFromInitialAfterExchange = ((depthW - depth) / 2);//Kolikaty tah od initial pozice (od 0), ne pultah
-                price /= (1 + howFarFromInitialAfterExchange / 100.0);
-            }
-
-            float foundVal = 0;
-            float valueWithThisPiece = valueSoFar + (price * occupancy());//price * occupancy();
-
-
-            //if (changeInto == nullptr)
-            //    changeInto = this;
-
-
-            if (depth > 0)
-            {
-                float foundOnly = board.tryPiece(column, row, this, depth, alpha, beta, valueWithThisPiece);
-
-
-                foundVal = foundOnly;
-
-                if ((foundOnly * occupancy() * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
-                {
-                    //if (foundVal > 0)
-                    totalMoves -= 1;
-                    return;
-                }
-            }
-            else//konec tady, list
-            {
-                foundVal = valueWithThisPiece;
-                //if (dynamicPositionRanking)
-                //    foundVal += board.tryPiecePosition(column, row, changeInto);
-            }
-
-
-            if (foundVal * occupancy() > bestValue * occupancy())
-                bestValue = foundVal;
-        }
-
-        switch (occupancy())
-        {
-        case(PlayerSide::WHITE): {//bily, maximalizuje hodnotu
-            alpha = std::max(alpha, bestValue);
-            //if (bestValue >= beta)
-              //  doNotContinue = true;
-        } break;
-        case(PlayerSide::BLACK): {
-            beta = std::min(beta, bestValue);
-            //if (bestValue <= alpha)
-              //  doNotContinue = true;
-        } break;
-        default:
-            std::unreachable();
-        }
-
-
-        if (beta <= alpha)
-        {
-            doNotContinue = true;
-        }
+        placePieceAt(board, column, row, depth, alpha, beta, bestValue, totalValues, totalMoves, doNotContinue, valueSoFar, price);
+        return true;
     }
+    else
+        return false;
 }
 
 
@@ -1342,41 +1378,47 @@ float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
 {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
-    i32 moves = 0;
-
-    auto availableOptions = evolveIntoReference(row + advanceRow());
 
     board.setPieceAt(column, row, nullptr);
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
 
-    if (board.priceInLocation(column, row + advanceRow(), occupancy()) == 0)//Muzu jit pescem o jedno dopredu
+    if (row == evolveRow()) [[unlikely]]
     {
-        if (canGoTwoFields(row))//Two fields forward
-        {
-            tryChangeAndUpdateIfBetter(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, 0, 0);
-        }
-        for (const auto& evolveOption : *availableOptions) {
-            float valueDifferenceNextMove = (evolveOption->pricePiece() - pricePiece()) * occupancy();
-            //One field forward
+        const auto& availableOptions = availablePromotes();//evolveIntoReference(row + advanceRow());
+        for (const auto& evolveOption : availableOptions) {
+            float valueDifferenceNextMove = (evolveOption->pricePiece() - pricePiece()) * occupancy();//Increase in material when the pawn promots
+            float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
+
+            //Capture diagonally
+            evolveOption->tryPlacingPieceAt(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+            evolveOption->tryPlacingPieceAt(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+
+            //Go forward
+            if (board.pieceAt(column, row + advanceRow()) == nullptr) [[likely]]//Field in front of the pawn is empty, can step forward
             {
-                evolveOption->tryChangeAndUpdateIfBetter(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, 0, 0);
+                evolveOption->tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
             }
         }
     }
-    for (const auto& evolveOption : *availableOptions) {
-        if (column < 7)
+    else [[likely]]
+    {
+        //Capture diagonally
+        tryPlacingPieceAt(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+        tryPlacingPieceAt(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+
+        //Go forward
+        bool goForwardSuccessful = tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+        if (goForwardSuccessful) [[likely]]//Field in front of the pawn is empty, can make a second step
         {
-            float valueDifferenceNextMove = (evolveOption->price(column + 1, row + advanceRow()) - price(column, row)) * occupancy();
-            evolveOption->tryChangeAndUpdateIfBetter(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, std::numeric_limits<float>::min());
-        }
-        if (column > 0)
-        {
-            float valueDifferenceNextMove = (evolveOption->price(column - 1, row + advanceRow()) - price(column, row)) * occupancy();
-            evolveOption->tryChangeAndUpdateIfBetter(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar + valueDifferenceNextMove, std::numeric_limits<float>::min());
+            if (canGoTwoFields(row))//Two fields forward
+            {
+                tryPlacingPieceAt(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+            }
         }
     }
+
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.setPieceAt(column, row, this);
 
@@ -1396,14 +1438,14 @@ float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
 
-    tryChangeAndUpdateIfBetter(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.setPieceAt(column, row, this);
@@ -1427,7 +1469,7 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
         float price = board.priceInLocation(column + i, row + i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1438,7 +1480,7 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
         float price = board.priceInLocation(column + i, row - i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1449,7 +1491,7 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
         float price = board.priceInLocation(column - i, row + i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1460,7 +1502,7 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
         float price = board.priceInLocation(column - i, row - i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1507,7 +1549,7 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
         float price = board.priceInLocation(column, row + i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1518,7 +1560,7 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
         float price = board.priceInLocation(column, row - i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1529,7 +1571,7 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
         float price = board.priceInLocation(column + i, row, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1540,7 +1582,7 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
         float price = board.priceInLocation(column - i, row, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1582,7 +1624,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column + i, row + i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1593,7 +1635,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column + i, row - i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1604,7 +1646,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column - i, row + i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1615,7 +1657,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column - i, row - i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1627,7 +1669,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column, row + i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1638,7 +1680,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column, row - i, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1649,7 +1691,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column + i, row, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1661,7 +1703,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
         float price = board.priceInLocation(column - i, row, occupancy());
         if (price >= 0)
         {
-            tryChangeAndUpdateIfBetter(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+            tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
             if (price > 0)
                 break;
         }
@@ -1692,14 +1734,14 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     canICastleLeft = false;
     canICastleRight = false;
 
-    tryChangeAndUpdateIfBetter(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryChangeAndUpdateIfBetter(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
     canICastleLeft = castleLeftBackup;
     canICastleRight = castleRightBackup;
