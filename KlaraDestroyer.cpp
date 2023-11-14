@@ -1367,7 +1367,7 @@ bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& 
     if (condition(price, 0))
     {
         placePieceAt(board, column, row, depth, alpha, beta, bestValue, totalValues, totalMoves, doNotContinue, valueSoFar, price);
-        return true;
+        return price==0;
     }
     else
         return false;
@@ -1463,52 +1463,11 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
-    //bool foundKing = false;
 
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column + i, row + i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column + i, row - i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column - i, row + i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column - i, row - i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.setPieceAt(column, row, this);
@@ -1545,50 +1504,10 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
         }
     }
 
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column, row + i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column, row - i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column + i, row, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column - i, row, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
 
     if (initialRow() == row)
     {
@@ -1620,96 +1539,15 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
     board.playerOnMove = oppositeSide(board.playerOnMove);
 
 
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column + i, row + i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column + i, row - i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column - i, row + i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column - i, row - i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
 
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column, row + i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column, row - i, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column + i, row, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
-
-    for (i8 i = 1; i < 8; ++i) {
-        float price = board.priceInLocation(column - i, row, occupancy());
-        if (price >= 0)
-        {
-            tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-            if (price > 0)
-                break;
-        }
-        else
-            break;
-    }
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.setPieceAt(column, row, this);
