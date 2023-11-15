@@ -41,6 +41,14 @@
 #define out std::cout
 #define nl '\n'
 
+#ifdef _DEBUG
+#define AssertAssume(...)  assert(__VA_ARGS__)
+#else
+#define AssertAssume(...)  __assume(__VA_ARGS__)
+#endif
+
+
+
 //#define CASTLING_DISABLED
 
 void init_locale(void)
@@ -107,7 +115,7 @@ struct Options {
 
 constexpr inline PlayerSide oppositeSide(PlayerSide side) noexcept
 {
-    [[assume(side==1||side==-1)]];
+    AssertAssume(side==1||side==-1);
     return (PlayerSide)((-1) * (i8)side);
 }
 
@@ -120,7 +128,7 @@ struct Piece {
 
     constexpr float priceAbsolute(i8 column, i8 row) const {
         auto res = pricePiece() + priceAdjustmentPov(column, row);
-        [[assume (res >= 0)]]
+        AssertAssume (res >= 0);
         return res;
     }
 
@@ -333,6 +341,14 @@ public:
         auto backup = playerOnMove;
         playerOnMove = onMove;
 
+        bool backupSave = saveToVector;
+        saveToVector = false;
+        auto backupCastlingLeft = canCastleLeft;
+        auto backupCastlingRight = canCastleRight;
+
+        canCastleLeft.fill(false);
+        canCastleRight.fill(false);
+
         for (i8 i = 0; i < pieces.size(); ++i) {
             Piece* found = pieces[i];
 
@@ -344,13 +360,20 @@ public:
 
                 if (foundVal * onMove == kingPrice) [[unlikely]]//Je možné vzít krále, hra skončila
                 {
+                    canCastleLeft = backupCastlingLeft;
+                    canCastleRight = backupCastlingRight;
+                    saveToVector = backupSave;
                     playerOnMove = backup;
+
                     return true;
                 }
-                    
+                
             }
         }
 
+        canCastleLeft = backupCastlingLeft;
+        canCastleRight = backupCastlingRight;
+        saveToVector = backupSave;
 
         playerOnMove = backup;
         return false;
@@ -363,20 +386,23 @@ public:
         constexpr float valueSoFar = 0;
 
         float alpha, beta;
-        alpha = -std::numeric_limits<float>::max();
-        beta = std::numeric_limits<float>::max();
+        alpha = -std::numeric_limits<float>::infinity();
+        beta = std::numeric_limits<float>::infinity();
 
         Piece* backup = pieceAt(column, row);
-        if (backup == nullptr)
-            return false;
+        //if (backup == nullptr)
+        //    return false;
+
+        auto backupPlayer = playerOnMove;
+        playerOnMove = attacker;
         
         switch (attacker)
         {
         case WHITE:
-            setPieceAt(column, row, &baitWhite);
+            setPieceAt(column, row, &baitBlack);
             break;
         case BLACK:
-            setPieceAt(column, row, &baitBlack);
+            setPieceAt(column, row, &baitWhite);
             break;
         default:
             std::unreachable();
@@ -392,15 +418,19 @@ public:
             {
                 auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
 
+                std::cerr << foundVal << std::endl;
+
                 if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
                 {
                     setPieceAt(column, row, backup);
+                    playerOnMove = backupPlayer;
                     return true;
                 }
 
             }
         }
         setPieceAt(column, row, backup);
+        playerOnMove = backupPlayer;
         return false;
     }
 
@@ -481,7 +511,7 @@ public:
         //i8 index = (column - 'a') + ((row - '1') * 8);
         const auto& piece = pieces[column + (row * 8)];
 
-        [[assume(playerColor == PlayerSide::Black || playerColor == PlayerSide::White)]];
+        AssertAssume(playerColor == PlayerSide::BLACK || playerColor == PlayerSide::WHITE);
 
         if (piece == nullptr)
             return 0;
@@ -491,7 +521,7 @@ public:
 
     Piece* pieceAt(i8 column, i8 row)
     {
-        assert (!(column < 0 || column > 7 || row < 0 || row > 7));
+        AssertAssume (!(column < 0 || column > 7 || row < 0 || row > 7));
         //else
         return pieces[column + (row * 8)];
     }
@@ -506,7 +536,7 @@ public:
 
     void setPieceAt(i8 column, i8 row, Piece* p)
     {
-        assert(!(column < 0 || column>7 || row < 0 || row>7));
+        AssertAssume(!(column < 0 || column>7 || row < 0 || row>7));
 
         pieces[column + (row * 8)] = p;
     }
@@ -521,7 +551,7 @@ public:
 
     void deleteAndOverwritePiece(i8 column, i8 row, Piece* p)
     {
-        assert (!(column < 0 || column>7 || row < 0 || row>7));
+        AssertAssume (!(column < 0 || column>7 || row < 0 || row>7));
 
         //delete pieces[(column - 'a') + (row - '1') * 8];
         pieces[column + (row * 8)] = p;
@@ -695,7 +725,7 @@ public:
     //template <bool saveToVector>
     float bestMoveScore(i8 depth, float valueSoFar, float alpha, float beta)
     {
-        [[assume(playerOnMove == 1 || playerOnMove == -1)]];
+        AssertAssume(playerOnMove == 1 || playerOnMove == -1);
 
         if (itsTimeToStop)// [[unlikely]]
             return 0;
@@ -839,7 +869,7 @@ struct Knight : virtual public Piece {
 
     constexpr float priceAdjustment(i8 column, i8 row) const final
     {
-        assert(column < 8 && row < 8 && column >=0 && row >= 0);
+        AssertAssume(column < 8 && row < 8 && column >=0 && row >= 0);
         constexpr std::array<std::array<float, 8>, 8> arr = { {
             {-50, -40, -30, -30, -30, -30, -40, -50},
             {-40, -20, + 0, + 0, + 0, + 0, -20, -40},
@@ -883,7 +913,7 @@ struct Bishop : virtual public Piece {
 
     constexpr float priceAdjustment(i8 column, i8 row) const final
     {
-        assert(column < 8 && row < 8);
+        AssertAssume(column < 8 && row < 8);
         constexpr std::array<std::array<float, 8>, 8> arr = { {
             {-20, -10, -10, -10, -10, -10, -10, -20},
             {-10, + 0, + 0, + 0, + 0, + 0, + 0, -10},
@@ -927,7 +957,7 @@ struct Rook : virtual public Piece {
 
     constexpr float priceAdjustment(i8 column, i8 row) const final
     {
-        assert(column < 8 && row < 8);
+        AssertAssume(column < 8 && row < 8);
         constexpr std::array<std::array<float, 8>, 8> arr = { {
             {+ 0, + 0, + 0, + 0, + 0, + 0, + 0, + 0},
             {+ 5, +10, +10, +10, +10, +10, +10, + 5},
@@ -982,7 +1012,7 @@ struct Queen : virtual public Piece {
 
     constexpr float priceAdjustment(i8 column, i8 row) const final
     {
-        assert(column < 8 && row < 8);
+        AssertAssume(column < 8 && row < 8);
         constexpr std::array<std::array<float, 8>, 8> arr = { {
             {-20, -10, -10, - 5, - 5, -10, -10, -20},
             {-10, + 0, + 0, + 0, + 0, + 0, + 0, -10},
@@ -1024,7 +1054,7 @@ struct King : virtual public Piece {
 
     constexpr float priceAdjustment(i8 column, i8 row) const final
     {
-        assert(column < 8 && row < 8);
+        AssertAssume(column < 8 && row < 8);
         constexpr std::array<std::array<float, 8>, 8> arr = { {
             {-30, -40, -40, -50, -50, -40, -40, -30},
             {-30, -40, -40, -50, -50, -40, -40, -30},
@@ -1044,7 +1074,7 @@ private:
     template <i8 rookColumn, i8 newRookColumn>
     void tryCastling(Board& board, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, float& bestValue, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue)
     {
-        [[assume(row == 0 || row == 7)]];
+        AssertAssume(row == 0 || row == 7);
         
         constexpr i8 kingColumn = 4;
         constexpr i8 sign = rookColumn < kingColumn ? 1 : -1;
@@ -1065,13 +1095,23 @@ private:
         if (pieceInCorner == nullptr)//The piece in the corner is not a rook or is vacant
             return;
 
-        for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
+        bool castleLeftBackup = canICastleLeft;
+        bool castleRightBackup = canICastleRight;
+
+        auto kingPiece = this;
+        //board.setPieceAt(kingColumn, row, nullptr);
+
+        if (saveToVector)[[unlikely]]//To optimize time, we do not check whether the path is attacked. May produce bad predictions, but only for small number of cases.
         {
-            if (board.canSquareBeTakenBy(i, row, oppositeSide(occupancy()))) [[unlikely]]//The path is attacked by enemy
+            for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
+            {
+                board.setPieceAt(i, row, kingPiece);
+                if (board.canTakeKing(oppositeSide(occupancy()))) [[unlikely]]//The path is attacked by enemy
                 {
-                    board.setPieceAt(rookColumn, row, pieceInCorner);
-                    return;
+                    goto theEnd;
                 }
+                board.setPieceAt(i, row, nullptr);
+            }
         }
 
         //Now we can be sure we can do the castling
@@ -1079,8 +1119,6 @@ private:
         valueSoFar += pieceInCorner->priceAdjustmentPov(newRookColumn, row);//Add the score of the rook on the next position
 
         //Castling is not allowed from this point onwards
-        bool castleLeftBackup = canICastleLeft;
-        bool castleRightBackup = canICastleRight;
         canICastleLeft = false;
         canICastleRight = false;
 
@@ -1089,9 +1127,11 @@ private:
         board.setPieceAt(newRookColumn, row, pieceInCorner);
         tryPlacingPieceAt(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
+        theEnd:
         //Revert to previous state
         board.setPieceAt(newRookColumn, row, nullptr);
         board.setPieceAt(rookColumn, row, pieceInCorner);
+        //board.setPieceAt(kingColumn, row, kingPiece);
         canICastleLeft = castleLeftBackup;
         canICastleRight = castleRightBackup;
     }
@@ -1127,7 +1167,7 @@ struct Pawn : virtual public Piece {
     }
     constexpr float priceAdjustment(i8 column, i8 row) const final
     {
-        assert(column < 8 && row < 8);
+        AssertAssume(column < 8 && row < 8);
         constexpr std::array<std::array<float, 8>, 8> arr = { {
             {+ 0, + 0, + 0, + 0, + 0, + 0, + 0, + 0},
             {+50, +50, +50, +50, +50, +50, +50, +50},
@@ -1587,17 +1627,18 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     canICastleLeft = castleLeftBackup;
     canICastleRight = castleRightBackup;
 
+
 #ifndef CASTLING_DISABLED
     if (canICastleLeft)//Neither has moved
     {
-        assert(column == 4);//King has to be in initial position
-        assert(row == 0 || row == 7);
+        AssertAssume(column == 4);//King has to be in initial position
+        AssertAssume(row == 0 || row == 7);
         tryCastling<0, 3>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, totalValues, valueSoFar, doNoContinue);
     }
     if (canICastleRight)//Neither has moved
     {
-        assert(column == 4);//King has to be in initial position
-        assert(row == 0 || row == 7);
+        AssertAssume(column == 4);//King has to be in initial position
+        AssertAssume(row == 0 || row == 7);
         tryCastling<7, 5>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, totalValues, valueSoFar, doNoContinue);
     }
 #endif
@@ -1711,7 +1752,7 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
             return;
         auto& tmp = *q[localPos];
 
-        assert(tmp.researchedBoard.playerOnMove == onMoveW);
+        AssertAssume(tmp.researchedBoard.playerOnMove == onMoveW);
 
         evaluateGameMoveFromQ(localPos, depthW);
     }
@@ -1757,7 +1798,7 @@ void printMoveInfo(unsigned depth, const double &elapsedTotal, const GameMove& m
 GameMove findBestOnSameLevel(std::vector<GameMove>& boards, i8 depth)//, PlayerSide onMove)
 {
     timeDepthStarted = std::chrono::high_resolution_clock::now();
-    assert(!boards.empty());
+    AssertAssume(!boards.empty());
     PlayerSide onMoveResearched = boards.front().researchedBoard.playerOnMove;
     depth -= boards.front().researchedDepth;
 
@@ -1965,6 +2006,7 @@ void executeMove(Board& board, std::string_view& str)
     auto backup = board.pieceAt(move[2], move[3]);
     board.deleteAndMovePiece(move[0], move[1], move[2], move[3]);
 
+    //Castling
     if (move == "e1c1" && board.pieceAt(move[2], move[3]) == &kingWhite)
         board.deleteAndMovePiece('a', '1', 'd', '1');
     else if (move == "e1g1" && board.pieceAt(move[2], move[3]) == &kingWhite)
@@ -1974,6 +2016,7 @@ void executeMove(Board& board, std::string_view& str)
     else if (move == "e8g8" && board.pieceAt(move[2], move[3]) == &kingBlack)
         board.deleteAndMovePiece('h', '8', 'f', '8');
 
+    //Pawn promotion
     else if (move.size() == 5)
     {
         Piece* evolvedInto = nullptr;
@@ -1995,13 +2038,69 @@ void executeMove(Board& board, std::string_view& str)
             evolvedInto = &knightBlack;
         board.deleteAndOverwritePiece(move[2], move[3], evolvedInto);
     }
-    else if (move[1] == '5' && board.pieceAt(move[2], move[3]) == &pawnWhite && move[0] != move[2] && backup == nullptr)//Bily tah mimochodem
+
+    //En passant
+    else if (move[1] == '5' && board.pieceAt(move[2], move[3]) == &pawnWhite && move[0] != move[2] && backup == nullptr)
     {
         board.deleteAndOverwritePiece(move[2], move[3] - 1, nullptr);
     }
-    else if (move[1] == '4' && board.pieceAt(move[2], move[3]) == &pawnBlack && move[0] != move[2] && backup == nullptr)//Bily tah mimochodem
+    else if (move[1] == '4' && board.pieceAt(move[2], move[3]) == &pawnBlack && move[0] != move[2] && backup == nullptr)
     {
         board.deleteAndOverwritePiece(move[2], move[3] + 1, nullptr);
+    }
+
+    //Castling posibility invalidation
+    //Doesn't matter when later in the game the piece no longer stands in original position -> it must have left before
+    switch (move[0])
+    {
+    case('e'): {
+        switch (move[1])
+        {
+        case('1'):
+        {
+            //White moves king
+            board.canCastleLeft[(PlayerSide::WHITE + 1) / 2] = false;
+            board.canCastleRight[(PlayerSide::WHITE + 1) / 2] = false;
+        } break;
+        case('8'):
+        {
+            //Black moves king
+            board.canCastleLeft[(PlayerSide::BLACK + 1) / 2] = false;
+            board.canCastleRight[(PlayerSide::BLACK + 1) / 2] = false;
+        } break;
+        default:
+            break;
+        }
+    } break;
+    case('a'): {
+        switch (move[1])
+        {
+        case('1'): {
+            board.canCastleLeft[(PlayerSide::WHITE + 1) / 2] = false;//White moves left rook
+        } break;
+        case('8'): {
+            board.canCastleLeft[(PlayerSide::BLACK + 1) / 2] = false;//Black moves left rook
+        } break;
+        default:
+            break;
+        }
+    } break;
+    case('h'): {
+        switch (move[1])
+        {
+        case ('1'): {
+            board.canCastleRight[(PlayerSide::WHITE + 1) / 2] = false;//White moves right rook
+        } break;
+        case ('8'): {
+            board.canCastleRight[(PlayerSide::BLACK + 1) / 2] = false;//Black moves right rook
+        } break;
+        default:
+            break;
+        }
+    } break;
+
+    default:
+        break;
     }
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
