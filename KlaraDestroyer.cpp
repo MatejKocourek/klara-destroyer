@@ -106,7 +106,7 @@ static i8 depthW;
 static PlayerSide onMoveW;
 static bool deterministic;
 static std::chrono::steady_clock::time_point timeGlobalStarted;
-static std::chrono::steady_clock::time_point timeDepthStarted;
+//static std::chrono::steady_clock::time_point timeDepthStarted;
 
 
 struct Options {
@@ -1266,6 +1266,7 @@ struct GameMove {
     float startingValue;
     //Board movePosition;
     i8 researchedDepth;
+    //std::chrono::duration<float, std::milli> researchedTime{0};
 
     PlayerSide firstMoveOnMove;
     std::array<char, 6> firstMoveNotation{ '\0' };
@@ -1698,10 +1699,15 @@ void printLowerBound()
 }
 void evaluateGameMove(GameMove& board, i8 depth)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
 {
+    //auto timeStart = std::chrono::high_resolution_clock::now();
     Board localBoard(board.researchedBoard);
 
-    if(options.MultiPV>1) [[unlikely]]//If we want to know multiple good moves, we cannot prune using a/B at root level
+    if (options.MultiPV > 1) [[unlikely]]//If we want to know multiple good moves, we cannot prune using a/B at root leve¨l
+    {
         board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+        //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
+    }
+
     else
     {
         switch (localBoard.playerOnMove)
@@ -1719,6 +1725,7 @@ void evaluateGameMove(GameMove& board, i8 depth)//, double alpha = -std::numeric
         default:
             std::unreachable();
         }
+        //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
         printLowerBound();
     }
 }
@@ -1795,9 +1802,8 @@ void printMoveInfo(unsigned depth, const double &elapsedTotal, const GameMove& m
         << nl;
 }
 
-GameMove findBestOnSameLevel(std::vector<GameMove>& boards, i8 depth)//, PlayerSide onMove)
+std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMove>& boards, i8 depth)//, PlayerSide onMove)
 {
-    timeDepthStarted = std::chrono::high_resolution_clock::now();
     AssertAssume(!boards.empty());
     PlayerSide onMoveResearched = boards.front().researchedBoard.playerOnMove;
     depth -= boards.front().researchedDepth;
@@ -1812,6 +1818,7 @@ GameMove findBestOnSameLevel(std::vector<GameMove>& boards, i8 depth)//, PlayerS
     const size_t threadCount = std::thread::hardware_concurrency();
 #endif
 
+    auto timeThisStarted = std::chrono::high_resolution_clock::now();
     if (depth > 0)
     {
         alphaOrBeta = std::numeric_limits<float>::max() * onMoveResearched;
@@ -1844,7 +1851,8 @@ GameMove findBestOnSameLevel(std::vector<GameMove>& boards, i8 depth)//, PlayerS
         q.clear();
         //transpositions.clear();
     }
-    
+    auto elapsedThis = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeThisStarted);
+
     switch (onMoveResearched)
     {
     case PlayerSide::WHITE: {
@@ -1857,25 +1865,25 @@ GameMove findBestOnSameLevel(std::vector<GameMove>& boards, i8 depth)//, PlayerS
         std::unreachable();
     }
     
-    
-    auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
+
+    auto elapsedTotal = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
 
 
     float scoreCp = boards.front().bestFoundValue;
-    std::cerr << "ScoreCP: " << scoreCp << std::endl;
+    //std::cerr << "ScoreCP: " << scoreCp << std::endl;
 
     //if (itsTimeToStop)
     //    return;
 
 
     for (size_t i = boards.size()-1; i != 0; --i)
-        printMoveInfo(depth + 1, elapsedTotal, boards[i],i+1, options.MultiPV == 1, oppositeSide(onMoveW));
+        printMoveInfo(depth + 1, elapsedTotal.count(), boards[i], i + 1, options.MultiPV == 1, oppositeSide(onMoveW));
 
-    printMoveInfo(depth + 1, elapsedTotal, boards.front(), 1, false, oppositeSide(onMoveW));
+    printMoveInfo(depth + 1, elapsedTotal.count(), boards.front(), 1, false, oppositeSide(onMoveW));
 
     std::cout << std::flush;
 
-    return boards.front();
+    return elapsedThis;
 }
 
 
@@ -1977,7 +1985,8 @@ std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//
 std::pair<Board, float> findBestOnTopLevel(Board& board, i8 depth, PlayerSide onMove)
 {
     auto tmp = generateMoves(board, onMove);//, onMove);
-    auto res = findBestOnSameLevel(tmp, depth - 1);//, oppositeSide(onMove));
+    findBestOnSameLevel(tmp, depth - 1);//, oppositeSide(onMove));
+    const auto& res = tmp.front();
     return { res.researchedBoard, res.bestFoundValue };
 }
 
@@ -2209,7 +2218,7 @@ GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = tr
             break;
         }
 
-        res = bestPosFound;
+        res = boardList.front();
         std::wcout << i << ' ';
 
         if (endSooner)
@@ -2259,7 +2268,7 @@ GameMove findBestInNumberOfMoves(Board& board, i8 moves)
             break;
         else
         {
-            res = bestPosFound;
+            res = boardList.front();
         }
         std::wcout << i << ' ';
     }
@@ -2571,9 +2580,9 @@ int uci()
             for (i8 i = 2; i <= maxDepth; i += 2) {
                 out << "info " << "depth " << unsigned(i) << nl << std::flush;
 
-                bestPosFound = findBestOnSameLevel(boardList, i);
-                auto elapsed = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeDepthStarted).count();
-                //chrono::duration_cast<chrono::milliseconds>();
+                std::chrono::duration<double, std::milli> elapsedThisDepth = findBestOnSameLevel(boardList, i);
+                bestPosFound = boardList.front();
+
                 auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
 
                 float scoreCp = bestPosFound.bestFoundValue;
@@ -2585,7 +2594,7 @@ int uci()
                 //dynamicPositionRanking = false;
 
                 //res = bestPosFound;
-                //std::cerr << "Elapsed time for ";
+                std::cerr << "Elapsed in this depth: " << elapsedThisDepth.count() << std::endl;;
                 //std::cerr << i + 1 << ' ';
 
 
@@ -2593,16 +2602,16 @@ int uci()
 
                 if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
                     break;
-                previousResults.emplace_back(elapsed, bestPosFound.bestFoundValue);
+                previousResults.emplace_back(elapsedThisDepth.count(), bestPosFound.bestFoundValue);
 
-                if (previousResults.size() >= 2)
+                if (previousResults.size() >= 3)
                 {
                     double logOlder = log2(previousResults[previousResults.size() - 2].first);
                     double logNewer = log2(previousResults[previousResults.size() - 1].first);
                     double growth = logNewer + logNewer - logOlder;
 
-                    constexpr double branching = 1.5;
-                    growth *= branching;
+                    constexpr double branchingFactor = 1.2;
+                    growth *= branchingFactor;
 
                     //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
                     //std::cerr << "log is " << growth << std::endl;
@@ -2628,7 +2637,7 @@ int uci()
 
                     std::cerr << "Last two diff is " << diff << std::endl;
 
-                    if (diff < 10)//The difference is too small, we probably wouldn't get much further info.
+                    if (diff < 100)//The difference is too small, we probably wouldn't get much further info.
                     {
                         std::cerr << "We could start another depth, but it's probably not necessary." << std::endl;
                         break;
