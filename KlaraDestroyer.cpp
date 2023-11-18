@@ -179,33 +179,33 @@ struct Piece {
     virtual ~Piece() = default;
 };
 
-struct Bait : public Piece
-{
-    constexpr wchar_t symbolW() const final
-    {
-        return L'?';
-    }
-    constexpr char symbolA() const final
-    {
-        return '?';
-    }
-    constexpr float pricePiece() const final
-    {
-        return std::numeric_limits<float>::max();
-    }
-    constexpr float priceAdjustment(i8 column, i8 row) const final
-    {
-        return 0;
-    }
-    constexpr float priceAdjustmentPov(i8 column, i8 row) const final
-    {
-        return 0;
-    }
-    float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false) const final
-    {
-        return std::numeric_limits<float>::infinity() * (-1) * occupancy();
-    }
-};
+//struct Bait : public Piece
+//{
+//    constexpr wchar_t symbolW() const final
+//    {
+//        return L'?';
+//    }
+//    constexpr char symbolA() const final
+//    {
+//        return '?';
+//    }
+//    constexpr float pricePiece() const final
+//    {
+//        return std::numeric_limits<float>::max();
+//    }
+//    constexpr float priceAdjustment(i8 column, i8 row) const final
+//    {
+//        return 0;
+//    }
+//    constexpr float priceAdjustmentPov(i8 column, i8 row) const final
+//    {
+//        return 0;
+//    }
+//    float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false) const final
+//    {
+//        return std::numeric_limits<float>::infinity() * (-1) * occupancy();
+//    }
+//};
 
 
 struct WhitePiece : virtual Piece {
@@ -225,29 +225,29 @@ struct BlackPiece : virtual Piece {
     }
 };
 
-struct BaitBlack final : public Bait
-{
-    constexpr PlayerSide occupancy() const final
-    {
-        return PlayerSide::BLACK;
-    }
-    //constexpr i8 initialRow() const final
-    //{
-    //    throw;
-    //}
-} baitBlack;
-
-struct BaitWhite final : public Bait
-{
-    constexpr PlayerSide occupancy() const final
-    {
-        return PlayerSide::WHITE;
-    }
-    //constexpr i8 initialRow() const final
-    //{
-    //    throw;
-    //}
-} baitWhite;
+//struct BaitBlack final : public Bait
+//{
+//    constexpr PlayerSide occupancy() const final
+//    {
+//        return PlayerSide::BLACK;
+//    }
+//    //constexpr i8 initialRow() const final
+//    //{
+//    //    throw;
+//    //}
+//} baitBlack;
+//
+//struct BaitWhite final : public Bait
+//{
+//    constexpr PlayerSide occupancy() const final
+//    {
+//        return PlayerSide::WHITE;
+//    }
+//    //constexpr i8 initialRow() const final
+//    //{
+//    //    throw;
+//    //}
+//} baitWhite;
 
 
 
@@ -391,59 +391,59 @@ public:
         return false;
     }
 
-    bool canSquareBeTakenBy(i8 column, i8 row, PlayerSide attacker)
-    {
-        i32 totalMoves = 0;
-        constexpr float valueSoFar = 0;
+    //bool canSquareBeTakenBy(i8 column, i8 row, PlayerSide attacker)
+    //{
+    //    i32 totalMoves = 0;
+    //    constexpr float valueSoFar = 0;
 
-        float alpha, beta;
-        alpha = -std::numeric_limits<float>::infinity();
-        beta = std::numeric_limits<float>::infinity();
+    //    float alpha, beta;
+    //    alpha = -std::numeric_limits<float>::infinity();
+    //    beta = std::numeric_limits<float>::infinity();
 
-        const Piece* backup = pieceAt(column, row);
-        //if (backup == nullptr)
-        //    return false;
+    //    const Piece* backup = pieceAt(column, row);
+    //    //if (backup == nullptr)
+    //    //    return false;
 
-        auto backupPlayer = playerOnMove;
-        playerOnMove = attacker;
-        
-        switch (attacker)
-        {
-        case WHITE:
-            pieceAt(column, row) = &baitBlack;
-            break;
-        case BLACK:
-            pieceAt(column, row) = &baitWhite;
-            break;
-        default:
-            std::unreachable();
-        }
+    //    auto backupPlayer = playerOnMove;
+    //    playerOnMove = attacker;
+    //    
+    //    switch (attacker)
+    //    {
+    //    case WHITE:
+    //        pieceAt(column, row) = &baitBlack;
+    //        break;
+    //    case BLACK:
+    //        pieceAt(column, row) = &baitWhite;
+    //        break;
+    //    default:
+    //        std::unreachable();
+    //    }
 
-        
-        for (i8 i = 0; i < pieces.size(); ++i) {
-            const Piece* found = pieces[i];
+    //    
+    //    for (i8 i = 0; i < pieces.size(); ++i) {
+    //        const Piece* found = pieces[i];
 
-            if (found == nullptr)
-                continue;
-            if (found->occupancy() == attacker)
-            {
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
+    //        if (found == nullptr)
+    //            continue;
+    //        if (found->occupancy() == attacker)
+    //        {
+    //            auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
 
-                std::cerr << foundVal << std::endl;
+    //            std::cerr << foundVal << std::endl;
 
-                if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
-                {
-                    pieceAt(column, row) = backup;
-                    playerOnMove = backupPlayer;
-                    return true;
-                }
+    //            if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
+    //            {
+    //                pieceAt(column, row) = backup;
+    //                playerOnMove = backupPlayer;
+    //                return true;
+    //            }
 
-            }
-        }
-        pieceAt(column, row) = backup;
-        playerOnMove = backupPlayer;
-        return false;
-    }
+    //        }
+    //    }
+    //    pieceAt(column, row) = backup;
+    //    playerOnMove = backupPlayer;
+    //    return false;
+    //}
 
     bool canMove(PlayerSide onMove)
     {
@@ -1219,7 +1219,7 @@ struct KingBlack final :public King, public BlackPiece {
 
 struct Pawn : virtual public Piece {
     constexpr virtual i8 evolveRow() const = 0;
-    virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const = 0;
+    //virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const = 0;
     virtual const std::array<Piece*, 4>& availablePromotes() const = 0;
     constexpr virtual i8 advanceRow() const = 0;
     constexpr virtual bool canGoTwoFields(i8 row) const = 0;
@@ -1281,15 +1281,15 @@ struct PawnWhite final :public Pawn, public WhitePiece {
         return 'p';
     }
 
-    virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const override
-    {
-        static static_vector<Piece*, 4> whiteEvolvePawnOnly{ &pawnWhite };
-        static static_vector<Piece*, 4> whiteEvolveLastRow{ &queenWhite, &rookWhite, &bishopWhite, &knightWhite };
-        if (row == evolveRow()) [[unlikely]]
-            return &whiteEvolveLastRow;
-        else [[likely]]
-            return &whiteEvolvePawnOnly;
-    }
+    //virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const override
+    //{
+    //    static static_vector<Piece*, 4> whiteEvolvePawnOnly{ &pawnWhite };
+    //    static static_vector<Piece*, 4> whiteEvolveLastRow{ &queenWhite, &rookWhite, &bishopWhite, &knightWhite };
+    //    if (row == evolveRow()) [[unlikely]]
+    //        return &whiteEvolveLastRow;
+    //    else [[likely]]
+    //        return &whiteEvolvePawnOnly;
+    //}
     const std::array<Piece*, 4>& availablePromotes() const override
     {
         static std::array<Piece*, 4> whiteEvolveLastRow{ &queenWhite, &rookWhite, &bishopWhite, &knightWhite };
@@ -1316,15 +1316,15 @@ struct PawnBlack final :public Pawn, public BlackPiece {
         return 'P';
     }
 
-    virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const override
-    {
-        static static_vector<Piece*, 4> blackEvolvePawnOnly{ &pawnBlack };
-        static static_vector<Piece*, 4> blackEvolveLastRow{ &queenBlack, &rookBlack, &bishopBlack, &knightBlack };
-        if (row == evolveRow()) [[unlikely]]
-            return &blackEvolveLastRow;
-        else [[likely]]
-            return &blackEvolvePawnOnly;
-    }
+    //virtual static_vector<Piece*, 4>* evolveIntoReference(i8 row) const override
+    //{
+    //    static static_vector<Piece*, 4> blackEvolvePawnOnly{ &pawnBlack };
+    //    static static_vector<Piece*, 4> blackEvolveLastRow{ &queenBlack, &rookBlack, &bishopBlack, &knightBlack };
+    //    if (row == evolveRow()) [[unlikely]]
+    //        return &blackEvolveLastRow;
+    //    else [[likely]]
+    //        return &blackEvolvePawnOnly;
+    //}
 
     const std::array<Piece*, 4>& availablePromotes() const override
     {
