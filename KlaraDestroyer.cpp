@@ -164,16 +164,16 @@ struct Piece {
         return os << symbolW();
     }
 
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNotContinue = false) const = 0;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNotContinue = false) const = 0;
 
-    void placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price) const;
+    void placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price) const;
 
     template <typename F>
-    bool tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition) const;
+    bool tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition) const;
 
-    auto tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar) const
+    auto tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, i32& totalMoves, bool& doNotContinue, float valueSoFar) const
     {
-        return tryPlacingPieceAt(board, column, row, depth, alpha, beta, bestValue, totalValues, totalMoves, doNotContinue, valueSoFar, MOVE_PIECE_FREE_CAPTURE);
+        return tryPlacingPieceAt(board, column, row, depth, alpha, beta, bestValue, totalMoves, doNotContinue, valueSoFar, MOVE_PIECE_FREE_CAPTURE);
     }
 
     virtual ~Piece() = default;
@@ -201,7 +201,7 @@ struct Bait : public Piece
     {
         return 0;
     }
-    float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNotContinue = false) const final
+    float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNotContinue = false) const final
     {
         return std::numeric_limits<float>::infinity() * (-1) * occupancy();
     }
@@ -369,7 +369,7 @@ public:
                 continue;
             if (found->occupancy() == onMove)
             {
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, valueSoFar);
 
                 if (foundVal * onMove == kingPrice) [[unlikely]]//Je možné vzít krále, hra skončila
                 {
@@ -429,7 +429,7 @@ public:
                 continue;
             if (found->occupancy() == attacker)
             {
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, valueSoFar);
 
                 std::cerr << foundVal << std::endl;
 
@@ -464,7 +464,7 @@ public:
                 continue;
             if (found->occupancy() == onMove)
             {
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, valueSoFar);
 
                 if (foundVal != std::numeric_limits<float>::infinity() * (-1) * onMove)
                     return true;
@@ -489,7 +489,7 @@ public:
             if (found == nullptr)
                 continue;
             if (found->occupancy() == onMove)
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, valueSoFar);
         }
         return totalMoves;
     }
@@ -698,7 +698,7 @@ public:
                 beta = std::numeric_limits<float>::max();
                 i32 totalMoves = 0;
                 double totalValues = 0;
-                pieces[i]->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, 0,true);
+                pieces[i]->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, 0,true);
 
                 res += (((double)totalMoves)/2.0) * pieces[i]->occupancy();
                 if(totalMoves>0)
@@ -745,7 +745,7 @@ public:
                 continue;
             if (found->occupancy() == playerOnMove)
             {
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depthToPieces, alpha, beta, totalMoves, totalValues, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depthToPieces, alpha, beta, totalMoves, valueSoFar);
 
                 if (depth == depthW && options.MultiPV == 1) [[unlikely]]
                     {
@@ -866,7 +866,7 @@ std::size_t BoardHasher::operator()(const Board& s) const noexcept
 
 struct Knight : virtual public Piece {
 
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 320;
@@ -921,7 +921,7 @@ struct KnightBlack final :public Knight, public BlackPiece {
 } knightBlack;
 
 struct Bishop : virtual public Piece {
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 333;
@@ -979,7 +979,7 @@ struct BishopBlack final :public Bishop, public BlackPiece {
 
 
 struct Rook : virtual public Piece {
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 510;
@@ -1048,7 +1048,7 @@ struct RookBlack final :public Rook, public BlackPiece {
 
 struct Queen : virtual public Piece {
 
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 880;
@@ -1102,7 +1102,7 @@ struct QueenBlack final :public Queen, public BlackPiece {
 
 
 struct King : virtual public Piece {
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         return kingPrice;
@@ -1139,7 +1139,7 @@ struct King : virtual public Piece {
     }
 private:
     template <i8 rookColumn, i8 newRookColumn>
-    void tryCastling(Board& board, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, float& bestValue, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const
+    void tryCastling(Board& board, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, float& bestValue, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const
     {
         AssertAssume(row == 0 || row == 7);
         
@@ -1192,7 +1192,7 @@ private:
         //Do the actual piece movement
         board.pieceAt(rookColumn, row) = nullptr;
         board.pieceAt(newRookColumn, row) = pieceInCorner;
-        tryPlacingPieceAt(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
 
         theEnd:
         //Revert to previous state
@@ -1262,7 +1262,7 @@ struct Pawn : virtual public Piece {
 
         return arr[row * 8 + column];
     }
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const override;
 };
 
 struct PawnWhite final :public Pawn, public WhitePiece {
@@ -1379,14 +1379,9 @@ struct GameMove {
 static std::vector<GameMove> firstPositions;
 
 
-void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price) const
+void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price) const
 {
-    //if (changeInto == nullptr) [[likely]]
-        //    changeInto = this;
-
     totalMoves += 1;
-
-    totalValues += price * occupancy();
 
     valueSoFar += priceAdjustmentPov(column, row) * occupancy(); //We are entering new position with this piece
 
@@ -1482,7 +1477,7 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
 
 
 template <typename F>
-bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition) const
+bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition) const
 {
     if (doNotContinue && !dynamicPositionRanking)
         return false;
@@ -1491,7 +1486,7 @@ bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& 
 
     if (condition(price, 0))
     {
-        placePieceAt(board, column, row, depth, alpha, beta, bestValue, totalValues, totalMoves, doNotContinue, valueSoFar, price);
+        placePieceAt(board, column, row, depth, alpha, beta, bestValue, totalMoves, doNotContinue, valueSoFar, price);
         return price==0;
     }
     else
@@ -1499,7 +1494,7 @@ bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& 
 }
 
 
-float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const
+float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const
 {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
@@ -1517,29 +1512,29 @@ float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
             float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
 
             //Capture diagonally
-            evolveOption->tryPlacingPieceAt(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-            evolveOption->tryPlacingPieceAt(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+            evolveOption->tryPlacingPieceAt(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+            evolveOption->tryPlacingPieceAt(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
 
             //Go forward
             if (board.pieceAt(column, row + advanceRow()) == nullptr) [[likely]]//Field in front of the pawn is empty, can step forward
             {
-                evolveOption->tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
+                evolveOption->tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
             }
         }
     }
     else [[likely]]
     {
         //Capture diagonally
-        tryPlacingPieceAt(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
-        tryPlacingPieceAt(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+        tryPlacingPieceAt(board, column - 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+        tryPlacingPieceAt(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
 
         //Go forward
-        bool goForwardSuccessful = tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+        bool goForwardSuccessful = tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
         if (goForwardSuccessful) [[likely]]//Field in front of the pawn is empty, can make a second step
         {
             if (canGoTwoFields(row))//Two fields forward
             {
-                tryPlacingPieceAt(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+                tryPlacingPieceAt(board, column, row + advanceRow() * 2, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
             }
         }
     }
@@ -1552,7 +1547,7 @@ float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
 }
 
 
-float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
+float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const {
 
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
@@ -1563,14 +1558,14 @@ float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
 
-    tryPlacingPieceAt(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.pieceAt(column, row) = this;
@@ -1578,7 +1573,7 @@ float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
     return bestValue;
 }
 
-float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
+float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const {
 
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
     //if (depth <= 0)
@@ -1589,10 +1584,10 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
 
-    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.pieceAt(column, row) = this;
@@ -1601,7 +1596,7 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
     return bestValue;
 }
 
-float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
+float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const {
 
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
@@ -1629,10 +1624,10 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
         }
     }
 
-    for (i8 i = 1; tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
 
     if (initialRow() == row)
     {
@@ -1654,7 +1649,7 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     return bestValue;
 }
 
-float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
+float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
     const Piece* originalPiece = board.pieceAt(column, row);
@@ -1664,15 +1659,15 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
     board.playerOnMove = oppositeSide(board.playerOnMove);
 
 
-    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row + i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row - i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row + i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
 
-    for (i8 i = 1; tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
-    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row + i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column, row - i, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column + i, row, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
+    for (i8 i = 1; tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar); ++i);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.pieceAt(column, row) = this;
@@ -1680,7 +1675,7 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
     return bestValue;
 }
 
-float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
+float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, float valueSoFar, bool doNoContinue) const {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
     board.pieceAt(column, row) = nullptr;
@@ -1697,14 +1692,14 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     canICastleLeft = false;
     canICastleRight = false;
 
-    tryPlacingPieceAt(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column, row + 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
+    tryPlacingPieceAt(board, column, row - 1, depth - 1, alpha, beta, bestValue, totalMoves, doNoContinue, valueSoFar);
 
     canICastleLeft = castleLeftBackup;
     canICastleRight = castleRightBackup;
@@ -1715,13 +1710,13 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     {
         AssertAssume(column == 4);//King has to be in initial position
         AssertAssume(row == 0 || row == 7);
-        tryCastling<0, 3>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, totalValues, valueSoFar, doNoContinue);
+        tryCastling<0, 3>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, valueSoFar, doNoContinue);
     }
     if (canICastleRight)//Neither has moved
     {
         AssertAssume(column == 4);//King has to be in initial position
         AssertAssume(row == 0 || row == 7);
-        tryCastling<7, 5>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, totalValues, valueSoFar, doNoContinue);
+        tryCastling<7, 5>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, totalMoves, valueSoFar, doNoContinue);
     }
 #endif
 
