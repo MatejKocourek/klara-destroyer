@@ -107,6 +107,19 @@ static PlayerSide onMoveW;
 static bool deterministic;
 static std::chrono::steady_clock::time_point timeGlobalStarted;
 //static std::chrono::steady_clock::time_point timeDepthStarted;
+static std::atomic<float> alphaOrBeta;
+
+template<typename T>
+inline void update_max(std::atomic<T>& atom, const T val)
+{
+    for (T atom_val = atom; atom_val < val && atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
+}
+
+template<typename T>
+inline void update_min(std::atomic<T>& atom, const T val)
+{
+    for (T atom_val = atom; atom_val > val && atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
+}
 
 
 struct Options {
@@ -759,6 +772,24 @@ public:
             if (found->occupancy() == playerOnMove)
             {
                 auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depthToPieces, alpha, beta, totalMoves, totalValues, valueSoFar);
+
+                if (depth == depthW && options.MultiPV == 1) [[unlikely]]
+                    {
+                        //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                        switch (playerOnMove)
+                        {
+                        case PlayerSide::WHITE: {
+                            beta = alphaOrBeta;
+                        } break;
+                        case PlayerSide::BLACK: {
+                            alpha = alphaOrBeta;
+                        } break;
+                        default:
+                            std::unreachable();
+                        }
+                        //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                    }
+
 
                 if (foundVal * playerOnMove > bestValue * playerOnMove) {
                     bestValue = foundVal;
@@ -1727,19 +1758,6 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
 }
 
 
-static std::atomic<float> alphaOrBeta;
-
-template<typename T>
-inline void update_max(std::atomic<T>& atom, const T val)
-{
-    for (T atom_val = atom; atom_val < val && atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
-}
-
-template<typename T>
-inline void update_min(std::atomic<T>& atom, const T val)
-{
-    for (T atom_val = atom; atom_val > val && atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
-}
 
 
 //template <typename T>
@@ -1910,8 +1928,8 @@ std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMov
         for (auto& board : boards)
             q.push_back(&board);
 
-        if(options.MultiPV<=1)
-            evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
+        //if(options.MultiPV<=1)
+        //    evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
         
 
         std::vector<std::thread> threads;
