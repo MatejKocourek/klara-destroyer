@@ -164,14 +164,14 @@ struct Piece {
         return os << symbolW();
     }
 
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNotContinue = false) = 0;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNotContinue = false) const = 0;
 
-    void placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price);
+    void placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price) const;
 
     template <typename F>
-    bool tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition);
+    bool tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition) const;
 
-    auto tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar)
+    auto tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar) const
     {
         return tryPlacingPieceAt(board, column, row, depth, alpha, beta, bestValue, totalValues, totalMoves, doNotContinue, valueSoFar, MOVE_PIECE_FREE_CAPTURE);
     }
@@ -201,7 +201,7 @@ struct Bait : public Piece
     {
         return 0;
     }
-    float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNotContinue = false) final
+    float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNotContinue = false) const final
     {
         return std::numeric_limits<float>::infinity() * (-1) * occupancy();
     }
@@ -264,7 +264,7 @@ static bool saveToVector = false;
 class Board {
     //Piece* pieces[64];
 public:
-    std::array<Piece*, 64> pieces;
+    std::array<const Piece*, 64> pieces;
     PlayerSide playerOnMove;
     std::array<bool, 2> canCastleLeft = { true, true };
     std::array<bool, 2> canCastleRight = { true, true };
@@ -363,7 +363,7 @@ public:
         canCastleRight.fill(false);
 
         for (i8 i = 0; i < pieces.size(); ++i) {
-            Piece* found = pieces[i];
+            const Piece* found = pieces[i];
 
             if (found == nullptr)
                 continue;
@@ -402,7 +402,7 @@ public:
         alpha = -std::numeric_limits<float>::infinity();
         beta = std::numeric_limits<float>::infinity();
 
-        Piece* backup = pieceAt(column, row);
+        const Piece* backup = pieceAt(column, row);
         //if (backup == nullptr)
         //    return false;
 
@@ -412,10 +412,10 @@ public:
         switch (attacker)
         {
         case WHITE:
-            setPieceAt(column, row, &baitBlack);
+            pieceAt(column, row) = &baitBlack;
             break;
         case BLACK:
-            setPieceAt(column, row, &baitWhite);
+            pieceAt(column, row) = &baitWhite;
             break;
         default:
             std::unreachable();
@@ -423,7 +423,7 @@ public:
 
         
         for (i8 i = 0; i < pieces.size(); ++i) {
-            Piece* found = pieces[i];
+            const Piece* found = pieces[i];
 
             if (found == nullptr)
                 continue;
@@ -435,14 +435,14 @@ public:
 
                 if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
                 {
-                    setPieceAt(column, row, backup);
+                    pieceAt(column, row) = backup;
                     playerOnMove = backupPlayer;
                     return true;
                 }
 
             }
         }
-        setPieceAt(column, row, backup);
+        pieceAt(column, row) = backup;
         playerOnMove = backupPlayer;
         return false;
     }
@@ -458,7 +458,7 @@ public:
         beta = std::numeric_limits<float>::max();
 
         for (i8 i = 0; i < pieces.size(); ++i) {
-            Piece* found = pieces[i];
+            const Piece* found = pieces[i];
 
             if (found == nullptr)
                 continue;
@@ -484,7 +484,7 @@ public:
         beta = std::numeric_limits<float>::max();
 
         for (i8 i = 0; i < pieces.size(); ++i) {
-            Piece* found = pieces[i];
+            const Piece* found = pieces[i];
 
             if (found == nullptr)
                 continue;
@@ -521,8 +521,7 @@ public:
         if (column < 0 || column > 7 || row < 0 || row > 7)
             return -std::numeric_limits<float>::infinity();
 
-        //i8 index = (column - 'a') + ((row - '1') * 8);
-        const auto& piece = pieces[column + (row * 8)];
+        const auto& piece = pieceAt(column,row);
 
         AssertAssume(playerColor == PlayerSide::BLACK || playerColor == PlayerSide::WHITE);
 
@@ -532,14 +531,25 @@ public:
             return piece->priceRelative(column, row) * (-playerColor);
     }
 
-    Piece* pieceAt(i8 column, i8 row)
+    const Piece*& pieceAt(i8 column, i8 row)
     {
         AssertAssume (!(column < 0 || column > 7 || row < 0 || row > 7));
-        //else
+        return pieces[column + (row * 8)];
+    }
+    const Piece* const& pieceAt(i8 column, i8 row) const
+    {
+        AssertAssume(!(column < 0 || column > 7 || row < 0 || row > 7));
         return pieces[column + (row * 8)];
     }
 
-    Piece* pieceAt(char column, char row)
+    const Piece*& pieceAt(char column, char row)
+    {
+        if (column < 'a' || column>'h' || row < '1' || row>'8')
+            throw std::exception("Invalid coordinates");
+        else
+            return pieceAt((i8)(column - 'a'), (i8)(row - '1'));
+    }
+    const Piece* const& pieceAt(char column, char row) const
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
             throw std::exception("Invalid coordinates");
@@ -547,52 +557,16 @@ public:
             return pieceAt((i8)(column - 'a'), (i8)(row - '1'));
     }
 
-    void setPieceAt(i8 column, i8 row, Piece* p)
+    void movePiece(char columnFrom, char rowFrom, char columnTo, char rowTo)
     {
-        AssertAssume(!(column < 0 || column>7 || row < 0 || row>7));
+        auto& from = pieceAt(columnFrom, rowFrom);
+        auto& to = pieceAt(columnTo, rowTo);
 
-        pieces[column + (row * 8)] = p;
-    }
+        if (from == nullptr)
+            throw std::exception("Trying to move an empty field");
 
-    void setPieceAt(char column, char row, Piece* p)
-    {
-        if (column < 'a' || column>'h' || row < '1' || row>'8')
-            throw std::exception("Invalid coordinates");
-        else
-            return setPieceAt((i8)(column - 'a'), (i8)(row - '1'), p);
-    }
-
-    void deleteAndOverwritePiece(i8 column, i8 row, Piece* p)
-    {
-        AssertAssume (!(column < 0 || column>7 || row < 0 || row>7));
-
-        //delete pieces[(column - 'a') + (row - '1') * 8];
-        pieces[column + (row * 8)] = p;
-    }
-
-    void deleteAndOverwritePiece(char column, char row, Piece* p)
-    {
-        if (column < 'a' || column>'h' || row < '1' || row>'8')
-            throw std::exception("Invalid coordinates");
-
-        //delete pieces[(column - 'a') + (row - '1') * 8];
-        return deleteAndOverwritePiece((i8)(column - 'a'), (i8)(row - '1'), p);
-    }
-
-    void deleteAndMovePiece(char columnFrom, char rowFrom, char columnTo, char rowTo)
-    {
-        if (columnFrom < 'a' || columnFrom>'h' || rowFrom < '1' || rowFrom>'8' || columnTo < 'a' || columnTo>'h' || rowTo < '1' || rowTo>'8')
-            throw std::exception("Invalid coordinates");
-
-        const i8 posFrom = (columnFrom - 'a') + (rowFrom - '1') * 8;
-        const i8 posTo = (columnTo - 'a') + (rowTo - '1') * 8;
-
-        if (pieces[posFrom] == nullptr)
-            throw std::exception("Trying to move empty field");
-
-        //delete pieces[posTo];
-        pieces[posTo] = pieces[posFrom];
-        pieces[posFrom] = nullptr;
+        to = from;
+        from = nullptr;
     }
 
     //void printW(PlayerSide pov = PlayerSide::WHITE) const
@@ -668,7 +642,7 @@ public:
     {
         std::array<char, 6> res = { 0 };
 
-        Piece* oldPiece = nullptr;
+        const Piece* oldPiece = nullptr;
 
         for (size_t i = 0; i < pieces.size(); ++i)
         {
@@ -765,7 +739,7 @@ public:
         i8 depthToPieces = depth;
 
         for (i8 i = 0; i < 64; ++i) {
-            Piece* found = pieces[i];
+            const Piece* found = pieces[i];
 
             if (found == nullptr)
                 continue;
@@ -845,21 +819,21 @@ public:
     }
 
 
-    float tryPiece(i8 column, i8 row, Piece* p, i8 depth, float alpha, float beta, float valueSoFar)
+    float tryPiece(i8 column, i8 row, const Piece* p, i8 depth, float alpha, float beta, float valueSoFar)
     {
-        Piece* backup = pieceAt(column, row);
-        setPieceAt(column, row, p);
+        const Piece* backup = pieceAt(column, row);
+        pieceAt(column, row) = p;
         auto foundVal = bestMoveScore(depth, valueSoFar, alpha, beta);
-        setPieceAt(column, row, backup);
+        pieceAt(column, row) = backup;
         return foundVal;
     }
 
-    double tryPiecePosition(i8 column, i8 row, Piece* p)
+    double tryPiecePosition(i8 column, i8 row, const Piece* p)
     {
-        Piece* backup = pieceAt(column, row);
-        setPieceAt(column, row, p);
+        const Piece* backup = pieceAt(column, row);
+        pieceAt(column, row) = p;
         auto foundVal = positionScoreHeuristic();
-        setPieceAt(column, row, backup);
+        pieceAt(column, row) = backup;
         return foundVal;
     }
 
@@ -892,7 +866,7 @@ std::size_t BoardHasher::operator()(const Board& s) const noexcept
 
 struct Knight : virtual public Piece {
 
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 320;
@@ -947,7 +921,7 @@ struct KnightBlack final :public Knight, public BlackPiece {
 } knightBlack;
 
 struct Bishop : virtual public Piece {
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue)  override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 333;
@@ -1005,7 +979,7 @@ struct BishopBlack final :public Bishop, public BlackPiece {
 
 
 struct Rook : virtual public Piece {
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 510;
@@ -1074,7 +1048,7 @@ struct RookBlack final :public Rook, public BlackPiece {
 
 struct Queen : virtual public Piece {
 
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         //return 880;
@@ -1128,7 +1102,7 @@ struct QueenBlack final :public Queen, public BlackPiece {
 
 
 struct King : virtual public Piece {
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
 
     virtual constexpr float pricePiece() const final {
         return kingPrice;
@@ -1165,7 +1139,7 @@ struct King : virtual public Piece {
     }
 private:
     template <i8 rookColumn, i8 newRookColumn>
-    void tryCastling(Board& board, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, float& bestValue, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue)
+    void tryCastling(Board& board, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, float& bestValue, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const
     {
         AssertAssume(row == 0 || row == 7);
         
@@ -1184,7 +1158,7 @@ private:
                 return;
         }
 
-        auto pieceInCorner = dynamic_cast<Rook*>(board.pieceAt(rookColumn, row));
+        auto pieceInCorner = dynamic_cast<const Rook*>(board.pieceAt(rookColumn, row));
         if (pieceInCorner == nullptr)//The piece in the corner is not a rook or is vacant
             return;
 
@@ -1198,12 +1172,12 @@ private:
         {
             for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
             {
-                board.setPieceAt(i, row, kingPiece);
+                board.pieceAt(i, row) = kingPiece;
                 if (board.canTakeKing(oppositeSide(occupancy()))) [[unlikely]]//The path is attacked by enemy
                 {
                     goto theEnd;
                 }
-                board.setPieceAt(i, row, nullptr);
+                board.pieceAt(i, row) = nullptr;
             }
         }
 
@@ -1216,14 +1190,14 @@ private:
         canICastleRight = false;
 
         //Do the actual piece movement
-        board.setPieceAt(rookColumn, row, nullptr);
-        board.setPieceAt(newRookColumn, row, pieceInCorner);
+        board.pieceAt(rookColumn, row) = nullptr;
+        board.pieceAt(newRookColumn, row) = pieceInCorner;
         tryPlacingPieceAt(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
         theEnd:
         //Revert to previous state
-        board.setPieceAt(newRookColumn, row, nullptr);
-        board.setPieceAt(rookColumn, row, pieceInCorner);
+        board.pieceAt(rookColumn, row) = pieceInCorner;
+        board.pieceAt(newRookColumn, row) = nullptr;
         //board.setPieceAt(kingColumn, row, kingPiece);
         canICastleLeft = castleLeftBackup;
         canICastleRight = castleRightBackup;
@@ -1288,7 +1262,7 @@ struct Pawn : virtual public Piece {
 
         return arr[row * 8 + column];
     }
-    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) override;
+    virtual float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const override;
 };
 
 struct PawnWhite final :public Pawn, public WhitePiece {
@@ -1405,7 +1379,7 @@ struct GameMove {
 static std::vector<GameMove> firstPositions;
 
 
-void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price)
+void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, float price) const
 {
     //if (changeInto == nullptr) [[likely]]
         //    changeInto = this;
@@ -1420,8 +1394,8 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
     {
         //if (changeInto == nullptr)
         //    changeInto = this;
-        Piece* backup = board.pieceAt(column, row);
-        board.setPieceAt(column, row, this);
+        const Piece* backup = board.pieceAt(column, row);
+        board.pieceAt(column, row) = this;
 
         saveToVector = false;
         if (board.isValidSetup())
@@ -1431,7 +1405,7 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
             float balance = board.balance();
             firstPositions.emplace_back(board, balance);
         }
-        board.setPieceAt(column, row, backup);
+        board.pieceAt(column, row) = backup;
 
         saveToVector = true;
         return;
@@ -1508,7 +1482,7 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
 
 
 template <typename F>
-bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition)
+bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, double& totalValues, i32& totalMoves, bool& doNotContinue, float valueSoFar, F condition) const
 {
     if (doNotContinue && !dynamicPositionRanking)
         return false;
@@ -1525,12 +1499,12 @@ bool Piece::tryPlacingPieceAt(Board& board, i8 column, i8 row, i8 depth, float& 
 }
 
 
-float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue)
+float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const
 {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
 
-    board.setPieceAt(column, row, nullptr);
+    board.pieceAt(column, row) = nullptr;
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1571,20 +1545,20 @@ float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     }
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
-    board.setPieceAt(column, row, this);
+    board.pieceAt(column, row) = this;
 
 
     return bestValue;
 }
 
 
-float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) {
+float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
 
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
     //if (depth <= 0)
       //  return 0;
-    board.setPieceAt(column, row, nullptr);
+    board.pieceAt(column, row) = nullptr;
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1599,18 +1573,18 @@ float Knight::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
     tryPlacingPieceAt(board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
-    board.setPieceAt(column, row, this);
+    board.pieceAt(column, row) = this;
 
     return bestValue;
 }
 
-float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) {
+float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
 
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
     //if (depth <= 0)
       //  return 0;
 
-    board.setPieceAt(column, row, nullptr);
+    board.pieceAt(column, row) = nullptr;
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1621,17 +1595,17 @@ float Bishop::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dep
     for (i8 i = 1; tryPlacingPieceAt(board, column - i, row - i, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
-    board.setPieceAt(column, row, this);
+    board.pieceAt(column, row) = this;
 
 
     return bestValue;
 }
 
-float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) {
+float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
 
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
-    board.setPieceAt(column, row, nullptr);
+    board.pieceAt(column, row) = nullptr;
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1675,16 +1649,16 @@ float Rook::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     }
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
-    board.setPieceAt(column, row, this);
+    board.pieceAt(column, row) = this;
 
     return bestValue;
 }
 
-float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) {
+float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
-    Piece* originalPiece = board.pieceAt(column, row);
-    board.setPieceAt(column, row, nullptr);
+    const Piece* originalPiece = board.pieceAt(column, row);
+    board.pieceAt(column, row) = nullptr;
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1701,15 +1675,15 @@ float Queen::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 dept
     for (i8 i = 1; tryPlacingPieceAt(board, column - i, row, depth - 1, alpha, beta, bestValue, totalValues, totalMoves, doNoContinue, valueSoFar); ++i);
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
-    board.setPieceAt(column, row, this);
+    board.pieceAt(column, row) = this;
 
     return bestValue;
 }
 
-float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) {
+float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, i32& totalMoves, double& totalValues, float valueSoFar, bool doNoContinue) const {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
-    board.setPieceAt(column, row, nullptr);
+    board.pieceAt(column, row) = nullptr;
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
@@ -1752,7 +1726,7 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
 #endif
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
-    board.setPieceAt(column, row, this);
+    board.pieceAt(column, row) = this;
 
     return bestValue;
 }
@@ -2107,17 +2081,17 @@ void executeMove(Board& board, std::string_view& str)
     auto move = getWord(str);
 
     auto backup = board.pieceAt(move[2], move[3]);
-    board.deleteAndMovePiece(move[0], move[1], move[2], move[3]);
+    board.movePiece(move[0], move[1], move[2], move[3]);
 
     //Castling
     if (move == "e1c1" && board.pieceAt(move[2], move[3]) == &kingWhite)
-        board.deleteAndMovePiece('a', '1', 'd', '1');
+        board.movePiece('a', '1', 'd', '1');
     else if (move == "e1g1" && board.pieceAt(move[2], move[3]) == &kingWhite)
-        board.deleteAndMovePiece('h', '1', 'f', '1');
+        board.movePiece('h', '1', 'f', '1');
     else if (move == "e8c8" && board.pieceAt(move[2], move[3]) == &kingBlack)
-        board.deleteAndMovePiece('a', '8', 'd', '8');
+        board.movePiece('a', '8', 'd', '8');
     else if (move == "e8g8" && board.pieceAt(move[2], move[3]) == &kingBlack)
-        board.deleteAndMovePiece('h', '8', 'f', '8');
+        board.movePiece('h', '8', 'f', '8');
 
     //Pawn promotion
     else if (move.size() == 5)
@@ -2139,17 +2113,17 @@ void executeMove(Board& board, std::string_view& str)
             evolvedInto = &knightWhite;
         else if (move[3] == '1' && move[4] == 'k')
             evolvedInto = &knightBlack;
-        board.deleteAndOverwritePiece(move[2], move[3], evolvedInto);
+        board.pieceAt(move[2], move[3]) = evolvedInto;
     }
 
     //En passant
     else if (move[1] == '5' && board.pieceAt(move[2], move[3]) == &pawnWhite && move[0] != move[2] && backup == nullptr)
     {
-        board.deleteAndOverwritePiece(move[2], move[3] - 1, nullptr);
+        board.pieceAt(move[2], move[3] - 1) = nullptr;
     }
     else if (move[1] == '4' && board.pieceAt(move[2], move[3]) == &pawnBlack && move[0] != move[2] && backup == nullptr)
     {
-        board.deleteAndOverwritePiece(move[2], move[3] + 1, nullptr);
+        board.pieceAt(move[2], move[3] + 1) = nullptr;
     }
 
     //Castling posibility invalidation
@@ -2226,41 +2200,41 @@ Board startingPosition()
     Board initial;
     initial.playerOnMove = PlayerSide::WHITE;
 
-    initial.deleteAndOverwritePiece('a', '1', &rookWhite);
-    initial.deleteAndOverwritePiece('b', '1', &knightWhite);
-    initial.deleteAndOverwritePiece('c', '1', &bishopWhite);
-    initial.deleteAndOverwritePiece('d', '1', &queenWhite);
-    initial.deleteAndOverwritePiece('e', '1', &kingWhite);
-    initial.deleteAndOverwritePiece('f', '1', &bishopWhite);
-    initial.deleteAndOverwritePiece('g', '1', &knightWhite);
-    initial.deleteAndOverwritePiece('h', '1', &rookWhite);
+    initial.pieceAt('a', '1') = &rookWhite;
+    initial.pieceAt('b', '1') = &knightWhite;
+    initial.pieceAt('c', '1') = &bishopWhite;
+    initial.pieceAt('d', '1') = &queenWhite;
+    initial.pieceAt('e', '1') = &kingWhite;
+    initial.pieceAt('f', '1') = &bishopWhite;
+    initial.pieceAt('g', '1') = &knightWhite;
+    initial.pieceAt('h', '1') = &rookWhite;
 
-    initial.deleteAndOverwritePiece('a', '2', &pawnWhite);
-    initial.deleteAndOverwritePiece('b', '2', &pawnWhite);
-    initial.deleteAndOverwritePiece('c', '2', &pawnWhite);
-    initial.deleteAndOverwritePiece('d', '2', &pawnWhite);
-    initial.deleteAndOverwritePiece('e', '2', &pawnWhite);
-    initial.deleteAndOverwritePiece('f', '2', &pawnWhite);
-    initial.deleteAndOverwritePiece('g', '2', &pawnWhite);
-    initial.deleteAndOverwritePiece('h', '2', &pawnWhite);
+    initial.pieceAt('a', '2') = &pawnWhite;
+    initial.pieceAt('b', '2') = &pawnWhite;
+    initial.pieceAt('c', '2') = &pawnWhite;
+    initial.pieceAt('d', '2') = &pawnWhite;
+    initial.pieceAt('e', '2') = &pawnWhite;
+    initial.pieceAt('f', '2') = &pawnWhite;
+    initial.pieceAt('g', '2') = &pawnWhite;
+    initial.pieceAt('h', '2') = &pawnWhite;
 
-    initial.deleteAndOverwritePiece('a', '8', &rookBlack);
-    initial.deleteAndOverwritePiece('b', '8', &knightBlack);
-    initial.deleteAndOverwritePiece('c', '8', &bishopBlack);
-    initial.deleteAndOverwritePiece('d', '8', &queenBlack);
-    initial.deleteAndOverwritePiece('e', '8', &kingBlack);
-    initial.deleteAndOverwritePiece('f', '8', &bishopBlack);
-    initial.deleteAndOverwritePiece('g', '8', &knightBlack);
-    initial.deleteAndOverwritePiece('h', '8', &rookBlack);
+    initial.pieceAt('a', '8') = &rookBlack;
+    initial.pieceAt('b', '8') = &knightBlack;
+    initial.pieceAt('c', '8') = &bishopBlack;
+    initial.pieceAt('d', '8') = &queenBlack;
+    initial.pieceAt('e', '8') = &kingBlack;
+    initial.pieceAt('f', '8') = &bishopBlack;
+    initial.pieceAt('g', '8') = &knightBlack;
+    initial.pieceAt('h', '8') = &rookBlack;
 
-    initial.deleteAndOverwritePiece('a', '7', &pawnBlack);
-    initial.deleteAndOverwritePiece('b', '7', &pawnBlack);
-    initial.deleteAndOverwritePiece('c', '7', &pawnBlack);
-    initial.deleteAndOverwritePiece('d', '7', &pawnBlack);
-    initial.deleteAndOverwritePiece('e', '7', &pawnBlack);
-    initial.deleteAndOverwritePiece('f', '7', &pawnBlack);
-    initial.deleteAndOverwritePiece('g', '7', &pawnBlack);
-    initial.deleteAndOverwritePiece('h', '7', &pawnBlack);
+    initial.pieceAt('a', '7') = &pawnBlack;
+    initial.pieceAt('b', '7') = &pawnBlack;
+    initial.pieceAt('c', '7') = &pawnBlack;
+    initial.pieceAt('d', '7') = &pawnBlack;
+    initial.pieceAt('e', '7') = &pawnBlack;
+    initial.pieceAt('f', '7') = &pawnBlack;
+    initial.pieceAt('g', '7') = &pawnBlack;
+    initial.pieceAt('h', '7') = &pawnBlack;
     return initial;
 }
 
@@ -2414,24 +2388,24 @@ long long boardUserInput(Board& board, PlayerSide printToSide)
             for (size_t i = 0; i < tmp.length(); i+=5)
             {
                 if (tmp[0+i] == 'w' && tmp[1+i] == 'q')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &queenWhite);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &queenWhite;
                 else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'q')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &queenBlack);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &queenBlack;
                 else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'r')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &rookWhite);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &rookWhite;
                 else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'r')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &rookBlack);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &rookBlack;
                 else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'b')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &bishopWhite);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &bishopWhite;
                 else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'b')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &bishopBlack);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &bishopBlack;
                 else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'k')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &knightWhite);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &knightWhite;
                 else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'k')
-                    board.deleteAndOverwritePiece(tmp[2 + i], tmp[3 + i], &knightBlack);
+                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &knightBlack;
                 else
                 {
-                    board.deleteAndMovePiece(tmp[0 + i], tmp[1 + i], tmp[2 + i], tmp[3 + i]);
+                    board.movePiece(tmp[0 + i], tmp[1 + i], tmp[2 + i], tmp[3 + i]);
                     if (tmp.size() < 5 + i || tmp[4 + i] != '+')
                         break;
                 }
@@ -2807,13 +2781,13 @@ int main(int argc, char** argv) {
             case(1):
             {
                 Board promotion;
-                promotion.deleteAndOverwritePiece('h', '5', &pawnBlack);
-                promotion.deleteAndOverwritePiece('d', '5', &pawnBlack);
-                promotion.deleteAndOverwritePiece('f', '5', &kingBlack);
-                promotion.deleteAndOverwritePiece('g', '1', &bishopBlack);
-                promotion.deleteAndOverwritePiece('e', '2', &kingWhite);
-                promotion.deleteAndOverwritePiece('b', '5', &pawnWhite);
-                promotion.deleteAndOverwritePiece('a', '6', &pawnWhite);
+                promotion.pieceAt('h', '5') = &pawnBlack;
+                promotion.pieceAt('d', '5') = &pawnBlack;
+                promotion.pieceAt('f', '5') = &kingBlack;
+                promotion.pieceAt('g', '1') = &bishopBlack;
+                promotion.pieceAt('e', '2') = &kingWhite;
+                promotion.pieceAt('b', '5') = &pawnWhite;
+                promotion.pieceAt('a', '6') = &pawnWhite;
 
                 promotion.print();
 
@@ -2822,12 +2796,12 @@ int main(int argc, char** argv) {
             case (2):
             {
                 Board testMatu;
-                testMatu.deleteAndOverwritePiece('h', '8', &kingBlack);
-                testMatu.deleteAndOverwritePiece('a', '1', &kingWhite);
-                testMatu.deleteAndOverwritePiece('g', '1', &rookWhite);
-                testMatu.deleteAndOverwritePiece('a', '7', &rookWhite);
-                testMatu.deleteAndOverwritePiece('b', '1', &queenWhite);
-                testMatu.deleteAndOverwritePiece('c', '7', &pawnWhite);
+                testMatu.pieceAt('h', '8') = &kingBlack;
+                testMatu.pieceAt('a', '1') = &kingWhite;
+                testMatu.pieceAt('g', '1') = &rookWhite;
+                testMatu.pieceAt('a', '7') = &rookWhite;
+                testMatu.pieceAt('b', '1') = &queenWhite;
+                testMatu.pieceAt('c', '7') = &pawnWhite;
                 testMatu.playerOnMove = PlayerSide::WHITE;
                 testMatu.print();
 
@@ -2836,12 +2810,12 @@ int main(int argc, char** argv) {
             case (3):
             {
                 Board testMatu;
-                testMatu.deleteAndOverwritePiece('h', '8', &kingBlack);
-                testMatu.deleteAndOverwritePiece('h', '7', &pawnWhite);
-                testMatu.deleteAndOverwritePiece('g', '6', &pawnWhite);
-                testMatu.deleteAndOverwritePiece('h', '6', &kingWhite);
-                testMatu.deleteAndOverwritePiece('h', '5', &pawnWhite);
-                testMatu.deleteAndOverwritePiece('g', '5', &pawnWhite);
+                testMatu.pieceAt('h', '8') = &kingBlack;
+                testMatu.pieceAt('h', '7') = &pawnWhite;
+                testMatu.pieceAt('g', '6') = &pawnWhite;
+                testMatu.pieceAt('h', '6') = &kingWhite;
+                testMatu.pieceAt('h', '5') = &pawnWhite;
+                testMatu.pieceAt('g', '5') = &pawnWhite;
 
                 //testMatu.deleteAndOverwritePiece('h', '4', &kingWhite);
                 //testMatu.deleteAndOverwritePiece('h', '3', &pawnWhite);
@@ -2857,11 +2831,11 @@ int main(int argc, char** argv) {
             {
                 Board test = startingPosition();
 
-                test.deleteAndOverwritePiece('b', '1', nullptr);
-                test.deleteAndOverwritePiece('c', '1', nullptr);
-                test.deleteAndOverwritePiece('d', '1', nullptr);
-                test.deleteAndOverwritePiece('f', '1', nullptr);
-                test.deleteAndOverwritePiece('g', '1', nullptr);
+                test.pieceAt('b', '1') = nullptr;
+                test.pieceAt('c', '1') = nullptr;
+                test.pieceAt('d', '1') = nullptr;
+                test.pieceAt('f', '1') = nullptr;
+                test.pieceAt('g', '1') = nullptr;
 
                 test.playerOnMove = PlayerSide::WHITE;
                 test.print();
