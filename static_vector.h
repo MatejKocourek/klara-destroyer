@@ -229,23 +229,37 @@ public:
 
 	struct Iterator
 	{
-		using iterator_category = std::contiguous_iterator_tag;
-		using difference_type = std::ptrdiff_t;
 		using value_type = T;
-		using pointer = T*;
-		using reference = T&;
+		using reference = value_type&;
+		using pointer = value_type*;
+		using iterator_category = std::random_access_iterator_tag;
+		using difference_type = std::ptrdiff_t;
+		using iterator_concept = std::contiguous_iterator_tag;
 
-		Iterator(pointer ptr) : m_ptr(ptr) {}
+		constexpr Iterator(T* iter = nullptr) : m_iterator{ iter } {}
 
-		reference operator*() const { return *m_ptr; }
-		pointer operator->() { return m_ptr; }
-		Iterator& operator++() { m_ptr++; return *this; }
-		Iterator operator++(int) { Iterator tmp = *this; ++(*this); return tmp; }
-		friend bool operator== (const Iterator& a, const Iterator& b) { return a.m_ptr == b.m_ptr; };
-		friend bool operator!= (const Iterator& a, const Iterator& b) { return a.m_ptr != b.m_ptr; };
+		constexpr bool operator==(const Iterator& other) const noexcept { return m_iterator == other.m_iterator; }
+		constexpr bool operator!=(const Iterator& other) const noexcept { return m_iterator != other.m_iterator; }
+		constexpr reference operator*() const noexcept { return *m_iterator; }
+		constexpr pointer operator->() const noexcept { return m_iterator; }
+		constexpr Iterator& operator++() noexcept { ++m_iterator; return *this; }
+		constexpr Iterator operator++(int) noexcept { Iterator tmp(*this); ++(*this); return tmp; }
+		constexpr Iterator& operator--() noexcept { --m_iterator; return *this; }
+		constexpr Iterator operator--(int) noexcept { Iterator tmp(*this); --(*this); return tmp; }
+		constexpr Iterator& operator+=(const difference_type other) noexcept { m_iterator += other; return *this; }
+		constexpr Iterator& operator-=(const difference_type other) noexcept { m_iterator -= other; return *this; }
+		constexpr Iterator operator+(const difference_type other) const noexcept { return Iterator(m_iterator + other); }
+		constexpr Iterator operator-(const difference_type other) const noexcept { return Iterator(m_iterator - other); }
+		constexpr Iterator operator+(const Iterator& other) const noexcept { return Iterator(*this + other.m_iterator); }
+		constexpr difference_type operator-(const Iterator& other) const noexcept { return m_iterator - other.m_iterator; }
+		constexpr reference operator[](std::size_t index) const { return m_iterator[index]; }
+		constexpr bool operator<(const Iterator& other) const noexcept { return m_iterator < other.m_iterator; }
+		constexpr bool operator>(const Iterator& other) const noexcept { return m_iterator > other.m_iterator; }
+		constexpr bool operator<=(const Iterator& other) const noexcept { return m_iterator <= other.m_iterator; }
+		constexpr bool operator>=(const Iterator& other) const noexcept { return m_iterator >= other.m_iterator; }
 
 	private:
-		pointer m_ptr;
+		T* m_iterator;
 	};
 
 	Iterator begin() {
