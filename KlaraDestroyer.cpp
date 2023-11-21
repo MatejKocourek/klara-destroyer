@@ -292,55 +292,12 @@ class Board {
 public:
     std::array<const Piece*, 64> pieces;
     PlayerSide playerOnMove;
-    std::array<bool, 2> canCastleLeft = { true, true };
-    std::array<bool, 2> canCastleRight = { true, true };
-    //bool canCastleLeft=true;
-    //bool canCastleRight=true;
+    std::array<bool, 2> canCastleLeft;
+    std::array<bool, 2> canCastleRight;
 
     auto operator<=>(const Board&) const noexcept = default;
 
-
     Board(const Board& copy) = default;
-    //{
-    //    for (ui8 i = 0; i < 64; ++i) {
-    //        if (copy.pieces[i] == nullptr)
-    //            pieces[i] = nullptr;
-    //        else
-    //            pieces[i] = copy.pieces[i]->clone();
-    //    }
-    //}
-    //Board(Board&& move) noexcept
-    //{
-    //    for (ui8 i = 0; i < 64; ++i) {
-    //        pieces[i] = move.pieces[i];
-    //        move.pieces[i] = nullptr;
-    //    }
-    //}
-
-    //Board& operator=(Board&& move)
-    //{
-    //    for (ui8 i = 0; i < 64; ++i) {
-    //        delete pieces[i];
-    //        pieces[i] = move.pieces[i];
-    //        move.pieces[i] = nullptr;
-    //    }
-    //    playerOnMove = move.playerOnMove;
-    //    return *this;
-    //}
-
-    Board& operator=(const Board& copy) = default;
-    //{
-    //    for (ui8 i = 0; i < 64; ++i) {
-    //        delete pieces[i];
-    //        if (copy.pieces[i] != nullptr)
-    //            pieces[i] = copy.pieces[i]->clone();
-    //        else
-    //            pieces[i] = nullptr;
-    //    }
-    //    playerOnMove = copy.playerOnMove;
-    //    return *this;
-    //}
-
 
     Board() : pieces{ {nullptr} }
     {
@@ -349,12 +306,7 @@ public:
         //}
     }
 
-    ~Board() = default;
-    //{
-    //    for (const auto& i : pieces) {
-    //        delete i;
-    //    }
-    //}
+    Board& operator=(const Board& copy) = default;
 
     std::array<i8, 128> piecesCount() const
     {
@@ -736,16 +688,12 @@ public:
     {
         AssertAssume(playerOnMove == 1 || playerOnMove == -1);
 
-        if (itsTimeToStop)// [[unlikely]]
-            return 0;
-
         //if(depth>3)
         //{
         //    auto found = transpositions.find(*this);
         //    if (found != transpositions.end())
         //        return found->second;
         //}
-
 
         //{
         //    std::cerr << "Found it" << nl << std::flush;
@@ -754,11 +702,9 @@ public:
 
 
         float bestValue = std::numeric_limits<float>::infinity() * (-1) * playerOnMove;
-        double totalValues = 0;
 
-
-        i32 totalMoves = 0;
-        i8 depthToPieces = depth;
+        //if (itsTimeToStop) [[unlikely]]
+        //    return bestValue;
 
         if (depth > depthToStopOrderingPieces) [[unlikely]]
         {
@@ -793,11 +739,11 @@ public:
                 float foundVal;
                 if (depth > depthToStopOrderingMoves) [[unlikely]]
                 {
-                    foundVal = found->bestMoveWithThisPieceScoreOrdered(*this, (i % 8), (i / 8), depthToPieces, alpha, beta, valueSoFar);
+                    foundVal = found->bestMoveWithThisPieceScoreOrdered(*this, (i % 8), (i / 8), depth, alpha, beta, valueSoFar);
                 }
                 else
                 {
-                    foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depthToPieces, alpha, beta, valueSoFar);
+                    foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depth, alpha, beta, valueSoFar);
                 }
 
                 if (depth == depthW && options.MultiPV == 1) [[unlikely]]
@@ -844,7 +790,7 @@ public:
                     continue;
                 if (found->occupancy() == playerOnMove)
                 {
-                    auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depthToPieces, alpha, beta, valueSoFar);
+                    auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depth, alpha, beta, valueSoFar);
 
                     if (foundVal * playerOnMove > bestValue * playerOnMove) {
                         bestValue = foundVal;
@@ -2026,9 +1972,6 @@ static std::atomic<size_t> qPos;
 
 void evaluateGameMoveFromQ(size_t posInQ, i8 depth)
 {
-    if (itsTimeToStop) [[unlikely]]
-        return;
-
     auto& board = *q[posInQ];
     std::osyncstream(out)
         << "info "
@@ -2044,9 +1987,15 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
 {
     while (true)
     {
+        if (itsTimeToStop) [[unlikely]]
+            return;
         size_t localPos = qPos++;
         if (localPos >= q.size()) [[unlikely]]//Stopper
-            return;
+            {
+                --localPos;
+                return;
+            }
+            
         auto& tmp = *q[localPos];
 
         AssertAssume(tmp.researchedBoard.playerOnMove == onMoveW);
@@ -2142,6 +2091,13 @@ std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMov
         //transpositions.clear();
     }
     auto elapsedThis = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeThisStarted);
+
+    if (qPos != boards.size())
+    {
+        std::cerr << "Not enough time to search all moves. Only managed to fully go through " << qPos << " out of " << boards.size() << std::endl;
+    }
+
+    boards.resize(qPos);
 
     switch (onMoveResearched)
     {
@@ -2422,6 +2378,8 @@ Board startingPosition()
 {
     Board initial;
     initial.playerOnMove = PlayerSide::WHITE;
+    initial.canCastleLeft.fill(true);
+    initial.canCastleRight.fill(true);
 
     initial.pieceAt('a', '1') = &rookWhite;
     initial.pieceAt('b', '1') = &knightWhite;
@@ -2592,154 +2550,6 @@ void benchmark(char depth = 8, Board board = startingPosition())
 }
 
 
-long long boardUserInput(Board& board, PlayerSide printToSide)
-{
-
-    std::string tmp;
-    auto startHuman = std::chrono::high_resolution_clock::now();
-    std::cin >> tmp;
-    auto endHuman = std::chrono::high_resolution_clock::now();
-
-
-    while (true)
-    {
-        try
-        {
-            if ((tmp.length()-4)%5!=0)
-                throw std::exception("bad input");
-
-            for (size_t i = 0; i < tmp.length(); i+=5)
-            {
-                if (tmp[0+i] == 'w' && tmp[1+i] == 'q')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &queenWhite;
-                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'q')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &queenBlack;
-                else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'r')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &rookWhite;
-                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'r')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &rookBlack;
-                else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'b')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &bishopWhite;
-                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'b')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &bishopBlack;
-                else if (tmp[0 + i] == 'w' && tmp[1 + i] == 'k')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &knightWhite;
-                else if (tmp[0 + i] == 'b' && tmp[1 + i] == 'k')
-                    board.pieceAt(tmp[2 + i], tmp[3 + i]) = &knightBlack;
-                else
-                {
-                    board.movePiece(tmp[0 + i], tmp[1 + i], tmp[2 + i], tmp[3 + i]);
-                    if (tmp.size() < 5 + i || tmp[4 + i] != '+')
-                        break;
-                }
-            }
-            
-
-            break;
-        }
-        catch (const std::exception& e)
-        {
-            out << e.what() << std::endl;
-            std::cin >> tmp;
-        }
-    }
-
-
-    auto elapsedHuman = std::chrono::duration_cast<std::chrono::milliseconds>(endHuman - startHuman).count();
-    std::wcout << "Human moved in " << elapsedHuman / 1000.0 << "s." << std::endl;
-
-    board.print(printToSide);
-    return elapsedHuman + 10;
-}
-
-
-void playGameInTime(Board board, PlayerSide onMove, int timeToPlay)
-{
-    board.print(onMove);
-    if (onMove == PlayerSide::BLACK)
-    {
-        boardUserInput(board,onMove);
-    }
-    board.playerOnMove = onMove;
-    
-    while (true)
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        auto balanceBefore = board.balance();
-        auto result = findBestInTimeLimit(board, timeToPlay);
-        std::string_view move = result.firstMoveNotation.data();
-        executeMove(board, move);
-        std::wcout << "Score change: " << result.bestFoundValue << std::endl<<"Score result: "<< result.bestFoundValue + balanceBefore << std::endl;
-        auto end = std::chrono::high_resolution_clock::now();
-
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
-        std::wcout << "Done in " << elapsed << "s." << std::endl;
-        board.print(onMove);
-
-        while (isspace(std::cin.peek()))
-            std::cin.get();
-
-        char op = std::cin.get();
-
-        if (op == '+' || op == '-' || op == '=')
-        {
-            int seconds;
-            std::cin >> seconds;
-            switch (op)
-            {
-            case('+'):
-                timeToPlay += seconds * 1000;
-                break;
-            case('-'):
-                timeToPlay -= seconds * 1000;
-                break;
-            case('='):
-                timeToPlay = seconds * 1000;
-                break;
-            }
-            std::wcout << "Time for move changed to " << timeToPlay << "ms." << std::endl;
-        }
-        else
-        {
-            std::cin.putback(op);
-        }
-
-        
-        boardUserInput(board, onMove);
-
-    }
-}
-
-
-
-void playGameResponding(Board board, PlayerSide onMove)
-{
-    long long milliseconds = 5000;
-    if (onMove == PlayerSide::BLACK)
-    {
-        milliseconds = boardUserInput(board, onMove);
-    }
-
-    while (true)
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        //doneMoves.clear();
-        board.playerOnMove = onMove;
-        auto result = findBestInTimeLimit(board, milliseconds);
-        //auto result = findBestInNumberOfMoves(researchedBoard, onMove, 8);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::string_view move = result.firstMoveNotation.data();
-        executeMove(board, move);
-        std::wcout << "Best position found score change: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
-
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
-        std::wcout << "PC answered in " << elapsed << "s." << std::endl;
-
-        board.print();
-        milliseconds = boardUserInput(board, onMove);
-    }
-}
-
 
 int uci()
 {
@@ -2871,7 +2681,11 @@ int uci()
             for (i8 i = 2; i <= maxDepth; i += 2) {
                 out << "info " << "depth " << unsigned(i) << nl << std::flush;
 
+                size_t availableMoveCount = boardList.size();
                 std::chrono::duration<double, std::milli> elapsedThisDepth = findBestOnSameLevel(boardList, i);
+                bool searchedThroughAllMoves = boardList.size() == availableMoveCount;
+
+
                 bestPosFound = boardList.front();
 
                 auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
@@ -2969,28 +2783,6 @@ int main(int argc, char** argv) {
             int n = std::atoi(argv[2]);
             benchmark(n);
         }
-        else if (argument == "timed")
-        {
-            deterministic = false;
-            std::wcout << "White/Black? [w/b]" << std::endl;
-            std::string color;
-            std::cin >> color;
-
-            PlayerSide side = color[0] == 'w' ? PlayerSide::WHITE : PlayerSide::BLACK;
-
-            playGameInTime(startingPosition(), side, 10000);
-        }
-        else if (argument == "imitating")
-        {
-            deterministic = false;
-            std::wcout << "White/Black? [w/b]" << std::endl;
-            std::string color;
-            std::cin >> color;
-
-            PlayerSide side = color[0] == 'w' ? PlayerSide::WHITE : PlayerSide::BLACK;
-
-            playGameResponding(startingPosition(), side);
-        }
 #ifdef _DEBUG
         else if (argument == "test")
         {
@@ -3011,10 +2803,11 @@ int main(int argc, char** argv) {
                 promotion.pieceAt('e', '2') = &kingWhite;
                 promotion.pieceAt('b', '5') = &pawnWhite;
                 promotion.pieceAt('a', '6') = &pawnWhite;
+                promotion.playerOnMove = PlayerSide::WHITE;
 
                 promotion.print();
 
-                playGameResponding(promotion, PlayerSide::WHITE);
+                benchmark(8, promotion);
             } break;
             case (2):
             {
