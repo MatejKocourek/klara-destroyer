@@ -37,6 +37,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <sstream>
 
 #define out std::cout
 #define nl '\n'
@@ -155,7 +156,7 @@ class TempSwap
     T& toSwap;
     T backup;
 public:
-    TempSwap(T& toSwap, T&& tempNewValue) : toSwap(toSwap), backup(toSwap)
+    TempSwap(T& toSwap, T tempNewValue) : toSwap(toSwap), backup(toSwap)
     {
         toSwap = std::forward<T>(tempNewValue);
     }
@@ -336,23 +337,15 @@ public:
 
     bool canTakeKing(PlayerSide onMove)
     {
-        i32 totalMoves = 0;
-        constexpr float valueSoFar = 0;
-
         float alpha, beta;
         alpha = -std::numeric_limits<float>::max();
         beta = std::numeric_limits<float>::max();
 
-        auto backup = playerOnMove;
-        playerOnMove = onMove;
+        TempSwap playerBackup(playerOnMove, onMove);
+        TempSwap vectorBackup(saveToVector, false);
 
-        bool backupSave = saveToVector;
-        saveToVector = false;
-        auto backupCastlingLeft = canCastleLeft;
-        auto backupCastlingRight = canCastleRight;
-
-        canCastleLeft.fill(false);
-        canCastleRight.fill(false);
+        TempSwap backupCastlingLeft(canCastleLeft,{false,false});
+        TempSwap backupCastlingRight(canCastleRight, { false,false });
 
         for (i8 i = 0; i < pieces.size(); ++i) {
             const Piece* found = pieces[i];
@@ -361,26 +354,15 @@ public:
                 continue;
             if (found->occupancy() == onMove)
             {
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, 0);
 
                 if (foundVal * onMove == kingPrice) [[unlikely]]//Je možné vzít krále, hra skončila
                 {
-                    canCastleLeft = backupCastlingLeft;
-                    canCastleRight = backupCastlingRight;
-                    saveToVector = backupSave;
-                    playerOnMove = backup;
-
                     return true;
                 }
                 
             }
         }
-
-        canCastleLeft = backupCastlingLeft;
-        canCastleRight = backupCastlingRight;
-        saveToVector = backupSave;
-
-        playerOnMove = backup;
         return false;
     }
 
@@ -440,9 +422,6 @@ public:
 
     bool canMove(PlayerSide onMove)
     {
-        i32 totalMoves = 0;
-        constexpr float valueSoFar = 0;
-
         float alpha, beta;
         alpha = -std::numeric_limits<float>::max();
         beta = std::numeric_limits<float>::max();
@@ -454,33 +433,13 @@ public:
                 continue;
             if (found->occupancy() == onMove)
             {
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
+                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, 0);
 
                 if (foundVal != std::numeric_limits<float>::infinity() * (-1) * onMove)
                     return true;
             }
         }
         return false;
-    }
-
-    i32 possibleMovesCount(PlayerSide onMove)
-    {
-        i32 totalMoves = 0;
-        constexpr float valueSoFar = 0;
-
-        float alpha, beta;
-        alpha = -std::numeric_limits<float>::max();
-        beta = std::numeric_limits<float>::max();
-
-        for (i8 i = 0; i < pieces.size(); ++i) {
-            const Piece* found = pieces[i];
-
-            if (found == nullptr)
-                continue;
-            if (found->occupancy() == onMove)
-                auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
-        }
-        return totalMoves;
     }
 
     bool isValidSetup()
@@ -832,8 +791,7 @@ public:
 
         if (bestValue == (float)(std::numeric_limits<float>::infinity() * playerOnMove * (-1))) [[unlikely]]//Nemůžu udělat žádný legitimní tah (pat nebo mat)
         {
-            bool saveToVectorBackup = saveToVector;
-            saveToVector = false;
+            TempSwap saveToVectorBackup(saveToVector, false);
             if(canTakeKing(oppositeSide(playerOnMove)))//if (round((bestMoveScore(1, onMove * (-1),valueSoFar, alpha, beta) * playerOnMove * (-1))/100) == kingPrice/100)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
             {
                 bestValue = -matePrice * playerOnMove;//Dostanu mat, co nejnižší skóre
@@ -853,7 +811,6 @@ public:
                 //}  
             }
             bestValue *=depth;//To get shit done quickly
-            saveToVector = saveToVectorBackup;
         }
 
         //if (depth > 3)
@@ -864,21 +821,9 @@ public:
 
     float tryPiece(i8 column, i8 row, const Piece* p, i8 depth, float alpha, float beta, float valueSoFar)
     {
-        const Piece* backup = pieceAt(column, row);
-        pieceAt(column, row) = p;
-        auto foundVal = bestMoveScore(depth, valueSoFar, alpha, beta);
-        pieceAt(column, row) = backup;
-        return foundVal;
+        TempSwap pieceBackup(pieceAt(column, row), p);
+        return bestMoveScore(depth, valueSoFar, alpha, beta);
     }
-
-    //double tryPiecePosition(i8 column, i8 row, const Piece* p)
-    //{
-    //    const Piece* backup = pieceAt(column, row);
-    //    pieceAt(column, row) = p;
-    //    auto foundVal = positionScoreHeuristic();
-    //    pieceAt(column, row) = backup;
-    //    return foundVal;
-    //}
 
     i8 countPiecesMin() const
     {
@@ -1855,24 +1800,6 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
     bool& canICastleLeft = board.canCastleLeft[(occupancy() + 1) / 2];
     bool& canICastleRight = board.canCastleLeft[(occupancy() + 1) / 2];
 
-    bool castleLeftBackup = canICastleLeft;
-    bool castleRightBackup = canICastleRight;
-
-    canICastleLeft = false;
-    canICastleRight = false;
-
-    tryPlacingPieceAt(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column + 1, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column, row + 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-    tryPlacingPieceAt(board, column, row - 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-
-    canICastleLeft = castleLeftBackup;
-    canICastleRight = castleRightBackup;
-
 
 #ifndef CASTLING_DISABLED
     if (canICastleLeft)//Neither has moved
@@ -1888,6 +1815,22 @@ float King::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
         tryCastling<7, 5>(board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, valueSoFar, doNoContinue);
     }
 #endif
+
+    //Classic king movement
+    {
+        TempSwap castleLeftBackup(canICastleLeft, false);
+        TempSwap castleRightBackup(canICastleLeft, false);
+
+        tryPlacingPieceAt(board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, column + 1, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, column - 1, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, column, row + 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        tryPlacingPieceAt(board, column, row - 1, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+    }
+
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.pieceAt(column, row) = this;
@@ -1920,14 +1863,23 @@ T& printScore(T& o, float scoreCp, i8 depth, PlayerSide playerOnMove)
         o << "cp " << round(scoreCp * playerOnMove);
     return o;
 }
+float lastReportedLowerBound;
 void printLowerBound()
 {
-    auto os = std::osyncstream(out);
-    os << "info " << "depth " << depthW + 1 << ' ';
-    printScore(os, alphaOrBeta, depthW + 1, oppositeSide(onMoveW));
-    os << ' ';
-    os << "lowerbound";
-    os << nl << std::flush;
+    static std::mutex m;
+    std::unique_lock lock(m);
+
+    float currentLowerBound = alphaOrBeta;
+    if (currentLowerBound > lastReportedLowerBound)
+    {
+        out << "info " << "depth " << depthW + 1 << ' ';
+        printScore(out, currentLowerBound, depthW + 1, oppositeSide(onMoveW));
+        out << ' ';
+        out << "lowerbound";
+        out << nl << std::flush;
+        lastReportedLowerBound = currentLowerBound;
+    }
+
 }
 void evaluateGameMove(GameMove& board, i8 depth)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
 {
@@ -2050,13 +2002,14 @@ std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMov
 #ifdef _DEBUG
     const size_t threadCount = 1;
 #else
-    const size_t threadCount = std::thread::hardware_concurrency();
+    const size_t threadCount = std::thread::hardware_concurrency()/2;
 #endif
 
     auto timeThisStarted = std::chrono::high_resolution_clock::now();
     if (depth > 0)
     {
         alphaOrBeta = std::numeric_limits<float>::max() * onMoveResearched;
+        lastReportedLowerBound = alphaOrBeta;
         //transpositions.clear();
 
         itsTimeToStop = false;
@@ -2523,49 +2476,9 @@ GameMove findBestInNumberOfMoves(Board& board, i8 moves)
 }
 
 
-void benchmark(char depth = 8, Board board = startingPosition())
+
+int uci(std::istream& in)
 {
-    board.print();
-    auto start = std::chrono::high_resolution_clock::now();
-    //doneMoves.clear();
-    //auto result = findBestOnTopLevel(researchedBoard,depth,onMove);
-    //auto result = findBestInTimeLimit(researchedBoard, onMove, timeToPlay);
-    auto result = findBestInNumberOfMoves(board, depth);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    //std::string_view move = result.firstMoveNotation.data();
-    //executeMove(board, move);
-    std::wcout << result.firstMoveNotation.data() << std::endl;
-
-    std::wcout << "cp: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
-
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
-    std::wcout << "Done in " << elapsed << "s." << std::endl;
-
-    //board.printW();
-}
-
-
-
-int uci()
-{
-    {
-        std::string command;
-        std::getline(std::cin, command);
-        if (command != "uci")
-        {
-            std::cerr << "Only UCI protocol is supported in this configuration." << std::endl;
-            return -1;
-        }
-    }
-
-    out << "id name Klara Destroyer" << nl
-        << "id author Matej Kocourek" << nl
-        << "option name MultiPV type spin min 1 default " << options.MultiPV << nl
-        << "uciok" << nl
-        << std::flush;
-
-
     //while (true)
     //{
         //std::string command;
@@ -2579,12 +2492,27 @@ int uci()
     while (true)
     {
         std::string command;
-        std::getline(std::cin, command);
-        //debugOut << command << std::endl;
+        std::getline(in, command);
+        
+        if (!in.good())
+        {
+            std::cerr << "End of input stream, rude! End the uci session with 'quit' in a controlled way." << std::endl;
+            return -1;
+        }
+            
+
 
         std::string_view commandView(command);
         auto commandFirst = getWord(commandView);
-        if (commandFirst == "isready")
+        if (commandFirst == "uci")
+        {
+            out << "id name Klara Destroyer" << nl
+                << "id author Matej Kocourek" << nl
+                << "option name MultiPV type spin min 1 default " << options.MultiPV << nl
+                << "uciok" << nl
+                << std::flush;
+        }
+        else if (commandFirst == "isready")
         {
             board = Board();
             out << "readyok" << nl << std::flush;
@@ -2759,6 +2687,39 @@ int uci()
 //}
 }
 
+
+void benchmark(i8 depth, Board board)
+{
+    board.print();
+    auto start = std::chrono::high_resolution_clock::now();
+    //doneMoves.clear();
+    //auto result = findBestOnTopLevel(researchedBoard,depth,onMove);
+    //auto result = findBestInTimeLimit(researchedBoard, onMove, timeToPlay);
+    auto result = findBestInNumberOfMoves(board, depth);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    //std::string_view move = result.firstMoveNotation.data();
+    //executeMove(board, move);
+    std::wcout << result.firstMoveNotation.data() << std::endl;
+
+    std::wcout << "cp: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
+    std::wcout << "Done in " << elapsed << "s." << std::endl;
+
+    //board.printW();
+}
+
+auto benchmark(size_t depth)
+{
+    std::stringstream ss;
+    ss << "uci\nisready\nposition startpos\ngo infinite depth " << depth << "\nquit\n";
+    std::cerr << ss.str() << std::endl;
+    return uci(ss);
+}
+
+
+
 int main(int argc, char** argv) {
     std::ios_base::sync_with_stdio(false);
     //std::cerr.sync_with_stdio(false);
@@ -2869,7 +2830,7 @@ int main(int argc, char** argv) {
     else
     {
         deterministic = false;
-        return uci();
+        return uci(std::cin);
     }
         
 
