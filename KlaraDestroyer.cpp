@@ -133,6 +133,21 @@ constexpr inline PlayerSide oppositeSide(PlayerSide side) noexcept
     AssertAssume(side==1||side==-1);
     return (PlayerSide)((-1) * (i8)side);
 }
+constexpr i8 oneColumn = 1;
+constexpr inline i8 column(i8 indexOnBoard) noexcept
+{
+    return indexOnBoard % 8;
+}
+constexpr i8 oneRow = 8;
+constexpr inline i8 row(i8 indexOnBoard) noexcept
+{
+    return indexOnBoard / 8;
+}
+constexpr inline i8 toIndex(i8 column, i8 row) noexcept
+{
+    return row * oneRow + column * oneColumn;
+}
+
 
 template <typename T>
 class TempSwap
@@ -1194,22 +1209,15 @@ private:
         if (pieceInCorner == nullptr)//The piece in the corner is not a rook or is vacant
             return;
 
-        bool castleLeftBackup = canICastleLeft;
-        bool castleRightBackup = canICastleRight;
-
-        auto kingPiece = this;
-        //board.setPieceAt(kingColumn, row, nullptr);
-
         if (saveToVector)[[unlikely]]//To optimize time, we do not check whether the path is attacked. May produce bad predictions, but only for small number of cases.
         {
             for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
             {
-                board.pieceAt(i, row) = kingPiece;
+                TempSwap<const Piece*> fieldSwap(board.pieceAt(i, row), this);
                 if (board.canTakeKing(oppositeSide(occupancy()))) [[unlikely]]//The path is attacked by enemy
                 {
-                    goto theEnd;
+                     return;
                 }
-                board.pieceAt(i, row) = nullptr;
             }
         }
 
@@ -1218,21 +1226,14 @@ private:
         valueSoFar += pieceInCorner->priceAdjustmentPov(newRookColumn, row);//Add the score of the rook on the next position
 
         //Castling is not allowed from this point onwards
-        canICastleLeft = false;
-        canICastleRight = false;
+        TempSwap castleLeftBackup(canICastleLeft, false);
+        TempSwap castleRightBackup(canICastleRight, false);
 
         //Do the actual piece movement
-        board.pieceAt(rookColumn, row) = nullptr;
-        board.pieceAt(newRookColumn, row) = pieceInCorner;
+        TempSwap<const Piece*> rookBackup(board.pieceAt(rookColumn, row), nullptr);
+        TempSwap<const Piece*> newRookBackup(board.pieceAt(newRookColumn, row), pieceInCorner);
         tryPlacingPieceAt(board, newKingColumn, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-
-        theEnd:
-        //Revert to previous state
-        board.pieceAt(rookColumn, row) = pieceInCorner;
-        board.pieceAt(newRookColumn, row) = nullptr;
-        //board.setPieceAt(kingColumn, row, kingPiece);
-        canICastleLeft = castleLeftBackup;
-        canICastleRight = castleRightBackup;
+        //State will be restored when calling destructors
     }
 };
 struct KingWhite final :public King, public WhitePiece {
@@ -1415,10 +1416,8 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
 {
     if (saveToVector && depth == 0) [[unlikely]]
     {
-        const Piece* backup = board.pieceAt(column, row);
-        board.pieceAt(column, row) = this;
-
-        saveToVector = false;
+        TempSwap<const Piece*> backup(board.pieceAt(column, row), this);
+        TempSwap saveVectorBackup(saveToVector, false);
         if (board.isValidSetup())
         {
             //float pieceTakenValue = valueSoFar + priceAbsolute * occupancy();
@@ -1426,9 +1425,6 @@ void Piece::placePieceAt(Board& board, i8 column, i8 row, i8 depth, float& alpha
             float balance = board.balance();
             firstPositions.emplace_back(board, balance);
         }
-        board.pieceAt(column, row) = backup;
-
-        saveToVector = true;
         return;
     }
 
@@ -1992,7 +1988,7 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
         size_t localPos = qPos++;
         if (localPos >= q.size()) [[unlikely]]//Stopper
             {
-                --localPos;
+                --qPos;
                 return;
             }
             
