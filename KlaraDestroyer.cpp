@@ -1458,17 +1458,16 @@ float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
 {
     float bestValue = std::numeric_limits<float>::infinity() * (-1) * occupancy();
 
-
     board.pieceAt(column, row) = nullptr;
     valueSoFar -= priceAdjustmentPov(column, row) * occupancy();//We are leaving our current position
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
 
-    if (row == evolveRow()) [[unlikely]]
+    if (row + advanceRow() == evolveRow()) [[unlikely]]
     {
         const auto& availableOptions = availablePromotes();//evolveIntoReference(row + advanceRow());
         for (const auto& evolveOption : availableOptions) {
-            float valueDifferenceNextMove = (evolveOption->pricePiece() - pricePiece()) * occupancy();//Increase in material when the pawn promots
+            float valueDifferenceNextMove = (evolveOption->pricePiece() - pricePiece()) * occupancy();//Increase in material when the pawn promotes
             float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
 
             //Capture diagonally
@@ -1476,10 +1475,7 @@ float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
             evolveOption->tryPlacingPieceAt(board, column + 1, row + advanceRow(), depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
 
             //Go forward
-            if (board.pieceAt(column, row + advanceRow()) == nullptr) [[likely]]//Field in front of the pawn is empty, can step forward
-            {
-                evolveOption->tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
-            }
+            evolveOption->tryPlacingPieceAt(board, column, row + advanceRow(), depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
         }
     }
     else [[likely]]
@@ -1501,7 +1497,6 @@ float Pawn::bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth
 
     board.playerOnMove = oppositeSide(board.playerOnMove);
     board.pieceAt(column, row) = this;
-
 
     return bestValue;
 }
@@ -1872,11 +1867,12 @@ void printLowerBound()
     float currentLowerBound = alphaOrBeta;
     if (currentLowerBound*onMoveW < lastReportedLowerBound * onMoveW)
     {
-        out << "info " << "depth " << depthW + 1 << ' ';
-        printScore(out, currentLowerBound, depthW + 1, oppositeSide(onMoveW));
-        out << ' ';
-        out << "lowerbound";
-        out << nl << std::flush;
+        std::osyncstream syncout(out);
+        syncout << "info " << "depth " << depthW + 1 << ' ';
+        printScore(syncout, currentLowerBound, depthW + 1, oppositeSide(onMoveW));
+        syncout << ' ';
+        syncout << "lowerbound";
+        syncout << nl << std::flush;
         lastReportedLowerBound = currentLowerBound;
     }
 
