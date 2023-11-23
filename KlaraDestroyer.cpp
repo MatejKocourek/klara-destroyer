@@ -1870,7 +1870,7 @@ void printLowerBound()
     std::unique_lock lock(m);
 
     float currentLowerBound = alphaOrBeta;
-    if (currentLowerBound > lastReportedLowerBound)
+    if (currentLowerBound*onMoveW < lastReportedLowerBound * onMoveW)
     {
         out << "info " << "depth " << depthW + 1 << ' ';
         printScore(out, currentLowerBound, depthW + 1, oppositeSide(onMoveW));
@@ -2542,11 +2542,12 @@ int uci(std::istream& in)
         {
             timeGlobalStarted = std::chrono::high_resolution_clock::now();
 
-            std::array<double, 2> playerTime;
-            std::array<double, 2> playerInc;
+            typedef std::chrono::duration<double, std::milli> floatMillis;
+            std::array<floatMillis, 2> playerTime;
+            std::array<floatMillis, 2> playerInc;
             //int64_t wtime = 0, btime = 0, winc = 0, binc = 0;
-            double timeTargetMax = 0;
-            double timeTargetOptimal = 0;
+            floatMillis timeTargetMax(0);
+            floatMillis timeTargetOptimal(0);
             i8 maxDepth = std::numeric_limits<i8>::max();
 
             while (true)
@@ -2555,41 +2556,62 @@ int uci(std::istream& in)
                 if (word.empty())
                     break;
                 else if (word == "wtime")
-                    playerTime[(PlayerSide::WHITE + 1) / 2] = atoll(getWord(commandView).data());
+                    playerTime[(PlayerSide::WHITE + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "btime")
-                    playerTime[(PlayerSide::BLACK + 1) / 2] = atoll(getWord(commandView).data());
+                    playerTime[(PlayerSide::BLACK + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "winc")
-                    playerInc[(PlayerSide::WHITE + 1) / 2] = atoll(getWord(commandView).data());
+                    playerInc[(PlayerSide::WHITE + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "binc")
-                    playerInc[(PlayerSide::BLACK + 1) / 2] = atoll(getWord(commandView).data());
+                    playerInc[(PlayerSide::BLACK + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "movetime")
                 {
-                    timeTargetMax = atoll(getWord(commandView).data());
+                    timeTargetMax = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                     timeTargetOptimal = timeTargetMax;
                 }
                 else if (word == "infinite")
                 {
-                    timeTargetMax = std::numeric_limits<double>::infinity();
-                    timeTargetOptimal = std::numeric_limits<double>::infinity();
+                    timeTargetMax = floatMillis(std::numeric_limits<double>::infinity());
+                    timeTargetOptimal = timeTargetMax;
                 }
                 else if (word == "depth")
                     maxDepth = atoll(getWord(commandView).data());
             }
-
-            if (timeTargetMax == 0)//We have to calculate our own time
+            
+            if (timeTargetMax == floatMillis(0))//We have to calculate our own time
             {
                 float gamePhase = (17.0f - board.countPiecesMin()) / 16.0f;
 
-                const int64_t& myTime = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? wtime : btime;
-                const int64_t& myInc = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
+                const auto& myTime = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? wtime : btime;
+                const auto& myInc = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
 
-                timeTargetOptimal = myInc + myTime * gamePhase / 6;
-                timeTargetMax = myInc + myTime * gamePhase / 3;
+                timeTargetMax = floatMillis(myInc + myTime * gamePhase / 3);
+                timeTargetOptimal = timeTargetMax / 3;
             }
 
 
-            std::cerr << "Targeting " << timeTargetOptimal << " ms." << std::endl;
-            std::cerr << "Highest I can go is " << timeTargetMax << " ms." << std::endl;
+            std::cerr << "Targeting " << timeTargetOptimal.count() << " ms." << std::endl;
+            std::cerr << "Highest I can go is " << timeTargetMax.count() << " ms." << std::endl;
+
+            itsTimeToStop = false;
+            std::mutex mTimeout;
+            std::condition_variable cvTimeout;
+
+            if (timeTargetMax != floatMillis(std::numeric_limits<double>::infinity()))
+            {
+                std::thread threadTimeout([&cvTimeout, &mTimeout, timeTargetMax]()
+                    {
+                        std::unique_lock<std::mutex> l(mTimeout);
+                        if (cvTimeout.wait_for(l, timeTargetMax) == std::cv_status::timeout)
+                        {
+                            itsTimeToStop = true;
+                            std::cerr << "Timeout!" << std::endl;
+                        }
+                            
+                    });
+
+                threadTimeout.detach();
+            }
+
 
 
             //dynamicPositionRanking = false;
@@ -2606,31 +2628,38 @@ int uci(std::istream& in)
                 out << "info " << "depth " << unsigned(i) << nl << std::flush;
 
                 size_t availableMoveCount = boardList.size();
-                std::chrono::duration<double, std::milli> elapsedThisDepth = findBestOnSameLevel(boardList, i);
+                floatMillis elapsedThisDepth = findBestOnSameLevel(boardList, i);
                 bool searchedThroughAllMoves = boardList.size() == availableMoveCount;
 
 
                 bestPosFound = boardList.front();
 
-                auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
+                auto elapsedTotal = floatMillis(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
 
                 float scoreCp = bestPosFound.bestFoundValue;
 
 
-                if (round(abs(scoreCp) / matePrice) > 0)
-                    break;
 
                 //dynamicPositionRanking = false;
 
                 //res = bestPosFound;
-                std::cerr << "Elapsed in this depth: " << elapsedThisDepth.count() << std::endl;;
+                std::cerr << "Elapsed in this depth: " << elapsedThisDepth.count() << std::endl;
                 //std::cerr << i + 1 << ' ';
 
-
+                if (round(abs(scoreCp) / matePrice) > 0)
+                {
+                    std::cerr << "Mate possibility, no need to search further" << std::endl;
+                    break;
+                }
+                    
                 //std::cerr << " is " << elapsed << std::endl;
 
                 if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
+                {
+                    std::cerr << "Emergency stop!" << std::endl;
                     break;
+                }
+                    
                 previousResults.emplace_back(elapsedThisDepth.count(), bestPosFound.bestFoundValue);
 
                 if (previousResults.size() >= 3)
@@ -2644,8 +2673,8 @@ int uci(std::istream& in)
 
                     //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
                     //std::cerr << "log is " << growth << std::endl;
-                    double projectedNextTime = pow(2, growth);
-                    std::cerr << "Projected next time is " << projectedNextTime << " ms." << std::endl;
+                    auto projectedNextTime = floatMillis(pow(2, growth));
+                    std::cerr << "Projected next time is " << projectedNextTime.count() << " ms." << std::endl;
 
                     if (projectedNextTime > (timeTargetMax - elapsedTotal))//.
                     {
@@ -2674,9 +2703,8 @@ int uci(std::istream& in)
                     std::cerr << "This time, we are using some extra time to really think about this move." << std::endl;
                 }
             }
-            //std::cerr << std::endl;
+            cvTimeout.notify_one();//Cancel the timeout timer
             out << "bestmove " << bestPosFound.firstMoveNotation.data() << nl << std::flush;
-
         }
         else
         {
