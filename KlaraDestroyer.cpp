@@ -242,7 +242,7 @@ constexpr char symbolA(Piece p)
     case KnightWhite:
         return 'n';
     case BishopWhite:
-        return  'b';
+        return 'b';
     case RookWhite:
         return 'r';
     case QueenWhite:
@@ -371,61 +371,20 @@ constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
     }
     std::unreachable();
 }
-constexpr float priceAdjustment(Piece p, i8 column, i8 row)
-{
-    return priceAdjustment(toGenericPiece(p), column, row);
-    /*AssertAssume(column < 8 && row < 8 && column >= 0 && row >= 0);
-    switch (p)
-    {
-    case Nothing:
-        return 0;
-    case PawnWhite:
-    case PawnBlack:
-    {
-        return priceAdjustment(PieceGeneric::Pawn, column, row);
-    }
-    case KnightWhite:
-    case KnightBlack:
-    {
-        return priceAdjustment(PieceGeneric::Knight, column, row);
-    }
-    case BishopWhite:
-    case BishopBlack:
-    {
-        return priceAdjustment(PieceGeneric::Bishop, column, row);
-    }
-    case RookWhite:
-    case RookBlack:
-    {
-        return priceAdjustment(PieceGeneric::Rook, column, row);
-    }
-    case QueenWhite:
-    case QueenBlack:
-    {
-        return priceAdjustment(PieceGeneric::Queen, column, row);
-    }
-    case KingWhite:
-    case KingBlack:
-    {
-        return priceAdjustment(PieceGeneric::King, column, row);
-    }
-    default:
-        std::unreachable();
-    }
-    std::unreachable();*/
-}
+//constexpr float priceAdjustment(Piece p, i8 column, i8 row)
+//{
+//    return priceAdjustment(toGenericPiece(p), column, row);
+//}
 constexpr float priceAdjustmentPov(Piece p, i8 column, i8 row)
 {
-    switch (pieceColor(p))
+    if (p < 0)//case(PlayerSide::BLACK):
     {
-    case(PlayerSide::WHITE):
-        return priceAdjustment(p, column, 7 - row);
-    case(PlayerSide::BLACK):
-        return priceAdjustment(p, column, row);
-    default:
-        std::unreachable();
+        return priceAdjustment((PieceGeneric)(-p), column, row);
     }
-    std::unreachable();
+    else//case(PlayerSide::WHITE):
+    {
+        return priceAdjustment((PieceGeneric)p, column, 7 - row);
+    }
 }
 
 constexpr float pricePiece(PieceGeneric p)
@@ -475,7 +434,7 @@ std::wostream& printPiece(Piece p, std::wostream& os) {
     return os << symbolW(p);
 }
 
-constexpr i8 evolveRow(PlayerSide s) {
+constexpr i8 promoteRow(PlayerSide s) {
     switch (s)
     {
     case WHITE:
@@ -808,16 +767,8 @@ public:
                 os << i + 1 << ' ';
                 for (i8 j = 7; j >= 0; --j) {
                     os << '|';
-                    if (pieces[j + i * 8] != Piece::Nothing)
-                        printPiece(pieces[j + i * 8], os);
-                    else
-                    {
-                        if constexpr (std::is_base_of<std::wios, T>::value)
-                            os << L' ';
-                        else
-                            os << ' ';
-                    }
 
+                    printPiece(pieces[j + i * 8], os);
                 }
                 os << '|' << nl;
             }
@@ -830,23 +781,11 @@ public:
                 for (i8 j = 0; j < 8; ++j) {
                     os << '|';
                     //wcout<<((((j+i*8)%2)==0)?"\033[40m":"\033[43m");
-                    if (pieces[j + i * 8] != Piece::Nothing)
-                        printPiece(pieces[j + i * 8], os);
-                    else
-                    {
-                        if constexpr (std::is_base_of<std::wios, T>::value)
-                            os << L' ';
-                        else
-                            os << ' ';
-                    }
+                    printPiece(pieces[j + i * 8], os);
                 }
                 os << '|' << nl;
             }
             os << "   a b c d e f g h";
-            /*
-            for (char j = 'a'; j <= 'h'; ++j) {
-                wcout<<j<<L' ';
-            }*/
         } break;
         default:
             std::unreachable();
@@ -871,7 +810,7 @@ public:
                 res[0] = i % 8 + 'a';
                 res[1] = i / 8 + '1';
 
-                if(pricePiece(old.pieces[i]) == kingPrice)//castling hack
+                if(toGenericPiece(old.pieces[i]) == PieceGeneric::King)//castling hack
                     break;
             }
         }
@@ -884,7 +823,7 @@ public:
                 res[2] = i % 8 + 'a';
                 res[3] = i / 8 + '1';
 
-                if (tolower(symbolA(oldPiece)) == 'p' && (res[3] == '1' || res[3] == '8'))
+                if (toGenericPiece(oldPiece) == PieceGeneric::Pawn && (res[3] == '1' || res[3] == '8'))
                 {
                     res[4] = tolower(symbolA(pieces[i]));
                 }
@@ -897,10 +836,13 @@ public:
     }
     
     float balance() const {
-        float res = 0;
+        double res = 0;
         for (i8 i = 0; i < 64; ++i) {
-            if (pieces[i] != Piece::Nothing)// && pieces[i]->pricePiece()!=kingPrice)
-                res += priceRelative(pieces[i], i % 8, i / 8);
+            if (pieces[i] == Piece::Nothing) [[likely]]//Just optimization
+                continue;
+            if (toGenericPiece(pieces[i]) == PieceGeneric::King) [[unlikely]]//To avoid floating point overflow
+                continue;
+            res += priceRelative(pieces[i], i % 8, i / 8);
         }
         return res;
     }
@@ -1335,7 +1277,7 @@ float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, floa
             break;
         case Pawn:
         {
-            if (row + board.playerOnMove == evolveRow(board.playerOnMove)) [[unlikely]]
+            if (row + board.playerOnMove == promoteRow(board.playerOnMove)) [[unlikely]]
                 {
                     const auto& availableOptions = availablePromotes(p);//evolveIntoReference(row + advanceRow());
                     for (const auto& evolveOption : availableOptions) {
