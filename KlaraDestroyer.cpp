@@ -38,6 +38,7 @@
 #include <condition_variable>
 #include <functional>
 #include <sstream>
+#include <iomanip>
 
 #define out std::cout
 #define nl '\n'
@@ -490,8 +491,6 @@ std::array<Piece, 4> availablePromotes(Piece p)
 
 }
 
-float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false);
-float bestMoveWithThisPieceScoreOrdered(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false);
 /*
     switch (p)
     {
@@ -526,11 +525,10 @@ struct BoardHasher
     std::size_t operator()(const Board& s) const noexcept;
 };
 
-static bool saveToVector = false;
-//std::unordered_map<Board, float, BoardHasher> transpositions;
 
 
-//const Piece emptyField;
+
+
 class Board {
     //Piece* pieces[64];
 public:
@@ -561,136 +559,6 @@ public:
                 ++res[symbolA(i)];
         }
         return res;
-    }
-
-    bool canTakeKing(PlayerSide onMove)
-    {
-        float alpha, beta;
-        alpha = -std::numeric_limits<float>::max();
-        beta = std::numeric_limits<float>::max();
-
-        TempSwap playerBackup(playerOnMove, onMove);
-        TempSwap vectorBackup(saveToVector, false);
-
-        TempSwap backupCastlingLeft(canCastleLeft,{false,false});
-        TempSwap backupCastlingRight(canCastleRight, { false,false });
-
-        for (i8 i = 0; i < pieces.size(); ++i) {
-            Piece found = pieces[i];
-
-            if (found == Piece::Nothing)
-                continue;
-            if (pieceColor(found) == onMove)
-            {
-                auto foundVal = bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, 0);
-
-                if (foundVal * onMove == kingPrice) [[unlikely]]//Je možné vzít krále, hra skončila
-                {
-                    return true;
-                }
-                
-            }
-        }
-        return false;
-    }
-
-    //bool canSquareBeTakenBy(i8 column, i8 row, PlayerSide attacker)
-    //{
-    //    i32 totalMoves = 0;
-    //    constexpr float valueSoFar = 0;
-
-    //    float alpha, beta;
-    //    alpha = -std::numeric_limits<float>::infinity();
-    //    beta = std::numeric_limits<float>::infinity();
-
-    //    const Piece* backup = pieceAt(column, row);
-    //    //if (backup == nullptr)
-    //    //    return false;
-
-    //    auto backupPlayer = playerOnMove;
-    //    playerOnMove = attacker;
-    //    
-    //    switch (attacker)
-    //    {
-    //    case WHITE:
-    //        pieceAt(column, row) = &baitBlack;
-    //        break;
-    //    case BLACK:
-    //        pieceAt(column, row) = &baitWhite;
-    //        break;
-    //    default:
-    //        std::unreachable();
-    //    }
-
-    //    
-    //    for (i8 i = 0; i < pieces.size(); ++i) {
-    //        const Piece* found = pieces[i];
-
-    //        if (found == nullptr)
-    //            continue;
-    //        if (found->pieceColor() == attacker)
-    //        {
-    //            auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
-
-    //            std::cerr << foundVal << std::endl;
-
-    //            if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
-    //            {
-    //                pieceAt(column, row) = backup;
-    //                playerOnMove = backupPlayer;
-    //                return true;
-    //            }
-
-    //        }
-    //    }
-    //    pieceAt(column, row) = backup;
-    //    playerOnMove = backupPlayer;
-    //    return false;
-    //}
-
-    bool canMove(PlayerSide onMove)
-    {
-        float alpha, beta;
-        alpha = -std::numeric_limits<float>::max();
-        beta = std::numeric_limits<float>::max();
-
-        for (i8 i = 0; i < pieces.size(); ++i) {
-            Piece found = pieces[i];
-
-            if (found == Piece::Nothing)
-                continue;
-            if (pieceColor(found) == onMove)
-            {
-                auto foundVal = bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, 0);
-
-                if (foundVal != std::numeric_limits<float>::infinity() * (-1) * onMove)
-                    return true;
-            }
-        }
-        return false;
-    }
-
-    bool isValidSetup()
-    {
-        TempSwap saveVectorBackup(saveToVector, false);
-        //bool backup = saveToVector;
-        //saveToVector = false;
-        //Both kings must be on the researchedBoard exactly once
-        auto count = piecesCount();
-        if (count['k'] != 1 || count['K'] != 1)
-            return false;
-
-        //print(std::cerr);
-        
-        //if (!canMove(opposideSide(playerOnMove)))
-          //  return false;
-        if (canTakeKing(playerOnMove))
-            return false;
-
-        //saveToVector = backup;
-
-        //TODO the rest
-        return true;
     }
 
     float priceInLocation(i8 column, i8 row, PlayerSide playerColor) const
@@ -746,10 +614,6 @@ public:
         from = Piece::Nothing;
     }
 
-    //void printW(PlayerSide pov = PlayerSide::WHITE) const
-    //{
-    //    print(std::wcout, pov);
-    //}
     void print(PlayerSide pov = PlayerSide::WHITE) const
     {
         return print(out, pov);
@@ -847,198 +711,7 @@ public:
         return res;
     }
 
-    //double positionScoreHeuristic() {
-    //    double res = 0;
-    //    for (i8 i = 0; i < 64; ++i) {
-    //        if (pieces[i] != nullptr)
-    //        {
-    //            float alpha, beta;
-    //            alpha = -std::numeric_limits<float>::max();
-    //            beta = std::numeric_limits<float>::max();
-    //            i32 totalMoves = 0;
-    //            double totalValues = 0;
-    //            pieces[i]->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, 0,true);
-
-    //            res += (((double)totalMoves)/2.0) * pieces[i]->pieceColor();
-    //            if(totalMoves>0)
-    //                res += std::min(std::max(totalValues,-100.0),100.0);
-    //        }
-    //    }
-    //    return res / 10000.0;
-    //}
-
-
-    //template <bool saveToVector>
-    float bestMoveScore(i8 depth, float valueSoFar, float alpha, float beta)
-    {
-        AssertAssume(playerOnMove == 1 || playerOnMove == -1);
-
-        //if(depth>3)
-        //{
-        //    auto found = transpositions.find(*this);
-        //    if (found != transpositions.end())
-        //        return found->second;
-        //}
-
-        //{
-        //    std::cerr << "Found it" << nl << std::flush;
-        //    print(std::cerr);
-        //}
-
-
-        float bestValue = std::numeric_limits<float>::infinity() * (-1) * playerOnMove;
-
-        //if (itsTimeToStop) [[unlikely]]
-        //    return bestValue;
-
-        if (depth > depthToStopOrderingPieces) [[unlikely]]
-        {
-            static_vector<std::pair<float, i8>, 16> possiblePiecesToMove;
-
-            for (i8 i = 0; i < 64; ++i) {
-                float alphaTmp = alpha;
-                float betaTmp = beta;
-                const Piece found = pieces[i];
-
-                if (found == Piece::Nothing)
-                    continue;
-                if (pieceColor(found) == playerOnMove)
-                    possiblePiecesToMove.emplace_back(bestMoveWithThisPieceScore(*this, i % 8, i / 8, 0, alphaTmp, betaTmp, valueSoFar), i);
-            }
-
-            switch (playerOnMove)
-            {
-            case PlayerSide::WHITE: {
-                std::sort(possiblePiecesToMove.begin(), possiblePiecesToMove.end(), [](auto& left, auto& right) {return left.first > right.first; });
-            } break;
-            case PlayerSide::BLACK: {
-                std::sort(possiblePiecesToMove.begin(), possiblePiecesToMove.end(), [](auto& left, auto& right) {return left.first < right.first; });
-            } break;
-            default:
-                std::unreachable();
-            }
-
-            for (const auto& move : possiblePiecesToMove) {
-                i8 i = move.second;
-                const Piece found = pieces[i];
-                float foundVal;
-                if (depth > depthToStopOrderingMoves) [[unlikely]]
-                {
-                    foundVal = bestMoveWithThisPieceScoreOrdered(*this, (i % 8), (i / 8), depth, alpha, beta, valueSoFar);
-                }
-                else
-                {
-                    foundVal = bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depth, alpha, beta, valueSoFar);
-                }
-
-                if (depth == depthW && options.MultiPV == 1) [[unlikely]]
-                    {
-                        //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
-                        switch (playerOnMove)
-                        {
-                        case PlayerSide::WHITE: {
-                            beta = alphaOrBeta;
-                        } break;
-                        case PlayerSide::BLACK: {
-                            alpha = alphaOrBeta;
-                        } break;
-                        default:
-                            std::unreachable();
-                        }
-                        //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
-                    }
-
-
-                        if (foundVal * playerOnMove > bestValue * playerOnMove) {
-                            bestValue = foundVal;
-                        }
-                    if (foundVal * playerOnMove == kingPrice)//Je možné vzít krále, hra skončila
-                    {
-                        //wcout << endl;
-                        //print();
-                        //break;
-                        return foundVal;//*depth;
-                    }
-                    if (beta <= alpha)
-                    {
-                        break;
-                        //depthToPieces = 0;
-                    }
-            }
-        }
-        else [[likely]]
-        {
-            for (i8 i = 0; i < 64; ++i) {
-                const Piece found = pieces[i];
-
-                if (found == Piece::Nothing)
-                    continue;
-                if (pieceColor(found) == playerOnMove)
-                {
-                    auto foundVal = bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), depth, alpha, beta, valueSoFar);
-
-                    if (foundVal * playerOnMove > bestValue * playerOnMove) {
-                        bestValue = foundVal;
-                    }
-                    if (foundVal * playerOnMove == kingPrice)//Je možné vzít krále, hra skončila
-                    {
-                        //wcout << endl;
-                        //print();
-                        //break;
-                        return foundVal;//*depth;
-                    }
-                    if (beta <= alpha)
-                    {
-                        break;
-                        //depthToPieces = 0;
-                    }
-                }
-            }
-        }
-
-        //if (saveToVector) [[unlikely]]
-            //return -std::numeric_limits<float>::max();
-
-
-        if (bestValue == (float)(std::numeric_limits<float>::infinity() * playerOnMove * (-1))) [[unlikely]]//Nemůžu udělat žádný legitimní tah (pat nebo mat)
-        {
-            TempSwap saveToVectorBackup(saveToVector, false);
-            if(canTakeKing(oppositeSide(playerOnMove)))//if (round((bestMoveScore(1, onMove * (-1),valueSoFar, alpha, beta) * playerOnMove * (-1))/100) == kingPrice/100)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
-            {
-                bestValue = -matePrice * playerOnMove;//Dostanu mat, co nejnižší skóre
-            }
-            else
-            {//Dostal bych pat, ten je vždycky lepší než dostat mat, ale chci ho docílit jen když prohrávám
-                bestValue = 0;//When we return 0, stalemate is preffered only if losing (0 is better than negative)
-                //if (valueSoFar * playerOnMove > 0)
-                //{
-                //    //std::cerr << "Stalemate not wanted for " << (unsigned)onMove << std::endl;
-                //    bestValue = -stalePrice * playerOnMove;//Vedu, nechci dostat pat
-                //}
-                //else
-                //{
-                //    //std::cerr << "Stalemate wanted for "<< (unsigned)onMove << std::endl;
-                //    bestValue = stalePrice * playerOnMove;//Prohrávám, dostat pat beru jako super tah
-                //}  
-            }
-            bestValue *=depth;//To get shit done quickly
-        }
-
-        //if (depth > 3)
-        //    transpositions.emplace(*this, bestValue);
-        return bestValue;
-    }
-
-
-    auto tryPiece(i8 column, i8 row, Piece p, i8 depth, float alpha, float beta, float valueSoFar)
-    {
-        TempSwap pieceBackup(pieceAt(column, row), p);
-        playerOnMove = oppositeSide(playerOnMove);
-        auto tmp = bestMoveScore(depth, valueSoFar, alpha, beta);
-        playerOnMove = oppositeSide(playerOnMove);
-        return tmp;
-    }
-
+    
     i8 countPiecesMin() const
     {
         std::array<i8, 2> counters{ 0 };
@@ -1065,211 +738,716 @@ std::size_t BoardHasher::operator()(const Board& s) const noexcept
 }
 
 
-struct GameMove {
-    Board researchedBoard;
+
+
+
+struct Variation {
+    Board board;
     float bestFoundValue;
     float startingValue;
     //Board movePosition;
-    i8 researchedDepth;
+    i8 variationDepth;
     //std::chrono::duration<float, std::milli> researchedTime{0};
 
     PlayerSide firstMoveOnMove;
     std::array<char, 6> firstMoveNotation{ '\0' };
 
+    std::vector<std::pair<Board, float>> firstPositions;
+    bool saveToVector = false;
+    //std::unordered_map<Board, float, BoardHasher> transpositions;
 
-    GameMove() = default;
-    GameMove(const GameMove& copy) noexcept = default;//:researchedBoard(copy.researchedBoard),bestFoundValue(copy.bestFoundValue),pieceTakenValue(copy.pieceTakenValue){}
-    GameMove(GameMove&& toMove) noexcept = default;// :researchedBoard(move(toMove.researchedBoard)), bestFoundValue(toMove.bestFoundValue), pieceTakenValue(toMove.pieceTakenValue) {}
+    size_t nodes = 0;
 
 
-    //GameMove& operator=(GameMove&& toMove) = default;
+    Variation() = default;
+    Variation(const Variation& copy) noexcept = default;//:researchedBoard(copy.researchedBoard),bestFoundValue(copy.bestFoundValue),pieceTakenValue(copy.pieceTakenValue){}
+    Variation(Variation&& toMove) noexcept = default;// :researchedBoard(move(toMove.researchedBoard)), bestFoundValue(toMove.bestFoundValue), pieceTakenValue(toMove.pieceTakenValue) {}
 
-    GameMove& operator=(const GameMove& copy) = default;
 
-    friend bool operator<(const GameMove& l, const GameMove& r)
+    //Variation& operator=(Variation&& toMove) = default;
+
+    Variation& operator=(const Variation& copy) = default;
+
+    friend bool operator<(const Variation& l, const Variation& r)
     {
         return l.bestFoundValue < r.bestFoundValue;
     }
-    friend bool operator>(const GameMove& l, const GameMove& r)
+    friend bool operator>(const Variation& l, const Variation& r)
     {
         return l.bestFoundValue > r.bestFoundValue;
     }
 
-    //GameMove(Board researchedBoard, double bestFoundValue, double startingValue):researchedBoard(move(researchedBoard)),bestFoundValue(bestFoundValue), startingValue(startingValue) {}
-    GameMove(Board board, float startingValue) :researchedBoard(std::move(board)), bestFoundValue(startingValue), startingValue(startingValue) {}
-};
+    //Variation(Board researchedBoard, double bestFoundValue, double startingValue):researchedBoard(move(researchedBoard)),bestFoundValue(bestFoundValue), startingValue(startingValue) {}
+    //Variation(Board board, float startingValue) :board(std::move(board)), bestFoundValue(startingValue), startingValue(startingValue) {}
+    Variation(Board board, float bestFoundValue, float startingValue, i8 variationDepth, PlayerSide firstMoveOnMove, std::array<char, 6> firstMoveNotation) :board(std::move(board)), bestFoundValue(bestFoundValue), startingValue(startingValue), variationDepth(variationDepth), firstMoveOnMove(firstMoveOnMove), firstMoveNotation(firstMoveNotation){}
 
 
-static std::vector<GameMove> firstPositions;
 
 
-void placePieceAt(Piece p, Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, bool& doNotContinue, float valueSoFar, float priceTaken)
-{
-    if (saveToVector && depth == 0) [[unlikely]]
+    bool canTakeKing(PlayerSide onMove)
     {
-        TempSwap backup(board.pieceAt(column, row), p);
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        if (board.isValidSetup())
-        {
-            //float pieceTakenValue = valueSoFar + priceAbsolute * pieceColor();
-            //board.print();
-            float balance = board.balance();
-            firstPositions.emplace_back(board, balance);
-        }
-        board.playerOnMove = oppositeSide(board.playerOnMove);
-        return;
-    }
+        float alpha, beta;
+        alpha = -std::numeric_limits<float>::max();
+        beta = std::numeric_limits<float>::max();
 
-    //if (doNotContinue) [[unlikely]]
-    //    return;
+        TempSwap playerBackup(board.playerOnMove, onMove);
+        TempSwap vectorBackup(saveToVector, false);
 
-    if (priceTaken >= kingPrice - 128) [[unlikely]]//Je možné vzít krále
-    {
-        doNotContinue = true;
-        bestValue = kingPrice * board.playerOnMove;
-        //totalMoves++;
-        //return;
-    }
-    else [[likely]]
-    {
-        float valueGained = priceTaken + priceAdjustmentPov(p, column, row); //We are entering new position with this piece
+        TempSwap backupCastlingLeft(board.canCastleLeft, { false,false });
+        TempSwap backupCastlingRight(board.canCastleRight, { false,false });
 
-        const auto wholeMovesFromRoot = ((depthW - depth) / 2);//Kolikaty tah od initial pozice (od 0), ne pultah
-        valueGained *= (1 - (wholeMovesFromRoot * 0.0001));//10000.0);
+        for (i8 i = 0; i < board.pieces.size(); ++i) {
+            Piece found = board.pieces[i];
 
-        valueSoFar += valueGained * board.playerOnMove;//Add our gained value to the score
-
-        float foundVal;
-        if (depth > 0)
-        {
-            foundVal = board.tryPiece(column, row, p, depth, alpha, beta, valueSoFar);
-
-            if ((foundVal * board.playerOnMove * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
-                return;
-        }
-        else//leaf node of the search tree
-            foundVal = valueSoFar;
-
-        if (foundVal * board.playerOnMove > bestValue * board.playerOnMove)
-            bestValue = foundVal;
-    }
-
-    switch (board.playerOnMove)
-    {
-    case(PlayerSide::WHITE): {
-        alpha = std::max(alpha, bestValue);//bily maximalizuje hodnotu
-    } break;
-    case(PlayerSide::BLACK): {
-        beta = std::min(beta, bestValue);
-    } break;
-    default:
-        std::unreachable();
-    }
-
-    doNotContinue |= (beta <= alpha);
-}
-
-
-template <typename F>
-bool tryPlacingPieceAt(Piece p, Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, bool& doNotContinue, float valueSoFar, F condition)
-{
-    if (doNotContinue)
-        return false;
-
-    float price = board.priceInLocation(column, row, board.playerOnMove);
-
-    if (condition(price, 0))
-    {
-        placePieceAt(p, board, column, row, depth, alpha, beta, bestValue, doNotContinue, valueSoFar, price);
-        return price == 0;
-    }
-    else
-        return false;
-}
-
-auto tryPlacingPieceAt(Piece p, Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, bool& doNotContinue, float valueSoFar)
-{
-    return tryPlacingPieceAt(p, board, column, row, depth, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_CAPTURE);
-}
-
-template <typename T>
-bool addMoveToList(Piece p, Board& board, i8 column, i8 row, float alpha, float beta, T& possibleMoves)
-{
-    bool doNotContinueTmp = false;
-    float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
-    bool fieldWasFree = tryPlacingPieceAt(p, board, column, row, 0, alpha, beta, bestValue, doNotContinueTmp, 0);
-
-    if (bestValue != -std::numeric_limits<float>::infinity() * board.playerOnMove)
-        possibleMoves.emplace_back(bestValue, std::make_pair(column, row));
-
-    return fieldWasFree;
-}
-
-template <i8 rookColumn, i8 newRookColumn>
-void tryCastling(Piece p, Board& board, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, float& bestValue, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNoContinue)
-{
-    AssertAssume(row == 0 || row == 7);
-
-    constexpr i8 kingColumn = 4;
-    constexpr i8 sign = rookColumn < kingColumn ? 1 : -1;
-    constexpr i8 newKingColumn = kingColumn - 2 * sign;
-    /*Castling is permitted only if
-- neither the king nor the rook has previously moved;
-- the squares between the king and the rook are vacant;
-- the king does not leave, cross over, or finish on a square attacked by an enemy piece.
-*/
-
-    for (i8 i = rookColumn + sign; i != kingColumn; i += sign)
-    {
-        if (board.pieceAt(i, row) != Piece::Nothing) [[likely]]//The path is not vacant
-            return;
-    }
-
-    auto pieceInCorner = board.pieceAt(rookColumn, row);
-    if (toGenericPiece(pieceInCorner) != PieceGeneric::Rook)//The piece in the corner is not a rook or is vacant
-        return;
-
-    if (saveToVector) [[unlikely]]//To optimize time, we do not check whether the path is attacked. May produce bad predictions, but only for small number of cases.
-        {
-            for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
+            if (found == Piece::Nothing)
+                continue;
+            if (pieceColor(found) == onMove)
             {
-                TempSwap fieldSwap(board.pieceAt(i, row), p);
-                if (board.canTakeKing(oppositeSide(pieceColor(p)))) [[unlikely]]//The path is attacked by enemy
+                auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), 1, alpha, beta, 0);
+
+                if (foundVal * onMove == kingPrice) [[unlikely]]//Je možné vzít krále, hra skončila
                     {
-                        return;
+                        return true;
                     }
+
             }
         }
+        return false;
+    }
 
-            //Now we can be sure we can do the castling
-        valueSoFar -= priceAdjustmentPov(pieceInCorner, rookColumn, row);//Remove the position score of the rook, it is leaving
-        valueSoFar += priceAdjustmentPov(pieceInCorner, newRookColumn, row);//Add the score of the rook on the next position
+    //bool canSquareBeTakenBy(i8 column, i8 row, PlayerSide attacker)
+    //{
+    //    i32 totalMoves = 0;
+    //    constexpr float valueSoFar = 0;
+    //    float alpha, beta;
+    //    alpha = -std::numeric_limits<float>::infinity();
+    //    beta = std::numeric_limits<float>::infinity();
+    //    const Piece* backup = pieceAt(column, row);
+    //    //if (backup == nullptr)
+    //    //    return false;
+    //    auto backupPlayer = playerOnMove;
+    //    playerOnMove = attacker;
+    //    
+    //    switch (attacker)
+    //    {
+    //    case WHITE:
+    //        pieceAt(column, row) = &baitBlack;
+    //        break;
+    //    case BLACK:
+    //        pieceAt(column, row) = &baitWhite;
+    //        break;
+    //    default:
+    //        std::unreachable();
+    //    }
+    //    
+    //    for (i8 i = 0; i < pieces.size(); ++i) {
+    //        const Piece* found = pieces[i];
+    //        if (found == nullptr)
+    //            continue;
+    //        if (found->pieceColor() == attacker)
+    //        {
+    //            auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
+    //            std::cerr << foundVal << std::endl;
+    //            if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
+    //            {
+    //                pieceAt(column, row) = backup;
+    //                playerOnMove = backupPlayer;
+    //                return true;
+    //            }
+    //        }
+    //    }
+    //    pieceAt(column, row) = backup;
+    //    playerOnMove = backupPlayer;
+    //    return false;
+    //}
 
-        //Castling is not allowed from this point onwards
-        TempSwap castleLeftBackup(canICastleLeft, false);
-        TempSwap castleRightBackup(canICastleRight, false);
-
-        //Do the actual piece movement
-        TempSwap rookBackup(board.pieceAt(rookColumn, row), Piece::Nothing);
-        TempSwap newRookBackup(board.pieceAt(newRookColumn, row), pieceInCorner);
-        tryPlacingPieceAt(p, board, newKingColumn, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-        //State will be restored when calling destructors
-}
-
-float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue)
-{
-    float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
-
-    Piece p = board.pieceAt(column, row);
-    PieceGeneric piece = toGenericPiece(p);
-    PlayerSide color = pieceColor(p);
-
-    assert(color == board.playerOnMove);
-    if (color == board.playerOnMove)
+    bool canMove(PlayerSide onMove)
     {
+        float alpha, beta;
+        alpha = -std::numeric_limits<float>::max();
+        beta = std::numeric_limits<float>::max();
+
+        for (i8 i = 0; i < board.pieces.size(); ++i) {
+            Piece found = board.pieces[i];
+
+            if (found == Piece::Nothing)
+                continue;
+            if (pieceColor(found) == onMove)
+            {
+                auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), 1, alpha, beta, 0);
+
+                if (foundVal != std::numeric_limits<float>::infinity() * (-1) * onMove)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    bool isValidSetup()
+    {
+        TempSwap saveVectorBackup(saveToVector, false);
+        //bool backup = saveToVector;
+        //saveToVector = false;
+        //Both kings must be on the researchedBoard exactly once
+        auto count = board.piecesCount();
+        if (count['k'] != 1 || count['K'] != 1)
+            return false;
+
+        //print(std::cerr);
+
+        //if (!canMove(opposideSide(playerOnMove)))
+          //  return false;
+        if (canTakeKing(board.playerOnMove))
+            return false;
+
+        //saveToVector = backup;
+
+        //TODO the rest
+        return true;
+    }
+    //double positionScoreHeuristic() {
+    //    double res = 0;
+    //    for (i8 i = 0; i < 64; ++i) {
+    //        if (pieces[i] != nullptr)
+    //        {
+    //            float alpha, beta;
+    //            alpha = -std::numeric_limits<float>::max();
+    //            beta = std::numeric_limits<float>::max();
+    //            i32 totalMoves = 0;
+    //            double totalValues = 0;
+    //            pieces[i]->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, totalMoves, totalValues, 0,true)
+    //            res += (((double)totalMoves)/2.0) * pieces[i]->pieceColor();
+    //            if(totalMoves>0)
+    //                res += std::min(std::max(totalValues,-100.0),100.0);
+    //        }
+    //    }
+    //    return res / 10000.0;
+    //}
+
+
+    //template <bool saveToVector>
+    float bestMoveScore(i8 depth, float valueSoFar, float alpha, float beta)
+    {
+        AssertAssume(board.playerOnMove == 1 || board.playerOnMove == -1);
+
+        //if(depth>3)
+        //{
+        //    auto found = transpositions.find(*this);
+        //    if (found != transpositions.end())
+        //        return found->second;
+        //}
+
+        //{
+        //    std::cerr << "Found it" << nl << std::flush;
+        //    print(std::cerr);
+        //}
+
+
+        float bestValue = std::numeric_limits<float>::infinity() * (-1) * board.playerOnMove;
+
+        //if (itsTimeToStop) [[unlikely]]
+        //    return bestValue;
+
+        if (depth > depthToStopOrderingPieces) [[unlikely]]
+            {
+                static_vector<std::pair<float, i8>, 16> possiblePiecesToMove;
+
+                for (i8 i = 0; i < 64; ++i) {
+                    float alphaTmp = alpha;
+                    float betaTmp = beta;
+                    const Piece found = board.pieces[i];
+
+                    if (found == Piece::Nothing)
+                        continue;
+                    if (pieceColor(found) == board.playerOnMove)
+                        possiblePiecesToMove.emplace_back(bestMoveWithThisPieceScore(i % 8, i / 8, 0, alphaTmp, betaTmp, valueSoFar), i);
+                }
+
+                switch (board.playerOnMove)
+                {
+                case PlayerSide::WHITE: {
+                    std::sort(possiblePiecesToMove.begin(), possiblePiecesToMove.end(), [](auto& left, auto& right) {return left.first > right.first; });
+                } break;
+                case PlayerSide::BLACK: {
+                    std::sort(possiblePiecesToMove.begin(), possiblePiecesToMove.end(), [](auto& left, auto& right) {return left.first < right.first; });
+                } break;
+                default:
+                    std::unreachable();
+                }
+
+                for (const auto& move : possiblePiecesToMove) {
+                    i8 i = move.second;
+                    const Piece found = board.pieces[i];
+                    float foundVal;
+                    if (depth > depthToStopOrderingMoves) [[unlikely]]
+                        {
+                            foundVal = bestMoveWithThisPieceScoreOrdered((i % 8), (i / 8), depth, alpha, beta, valueSoFar);
+                        }
+                    else
+                    {
+                        foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), depth, alpha, beta, valueSoFar);
+                    }
+
+                    if (depth == depthW && options.MultiPV == 1) [[unlikely]]
+                        {
+                            //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                            switch (board.playerOnMove)
+                            {
+                            case PlayerSide::WHITE: {
+                                beta = alphaOrBeta;
+                            } break;
+                            case PlayerSide::BLACK: {
+                                alpha = alphaOrBeta;
+                            } break;
+                            default:
+                                std::unreachable();
+                            }
+                            //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                        }
+
+
+                            if (foundVal * board.playerOnMove > bestValue * board.playerOnMove) {
+                                bestValue = foundVal;
+                            }
+                        if (foundVal * board.playerOnMove == kingPrice)//Je možné vzít krále, hra skončila
+                        {
+                            //wcout << endl;
+                            //print();
+                            //break;
+                            return foundVal;//*depth;
+                        }
+                        if (beta <= alpha)
+                        {
+                            break;
+                            //depthToPieces = 0;
+                        }
+                }
+            }
+        else [[likely]]
+            {
+                for (i8 i = 0; i < 64; ++i) {
+                    const Piece found = board.pieces[i];
+
+                    if (found == Piece::Nothing)
+                        continue;
+                    if (pieceColor(found) == board.playerOnMove)
+                    {
+                        auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), depth, alpha, beta, valueSoFar);
+
+                        if (foundVal * board.playerOnMove > bestValue * board.playerOnMove) {
+                            bestValue = foundVal;
+                        }
+                        if (foundVal * board.playerOnMove == pricePiece(PieceGeneric::King))//Je možné vzít krále, hra skončila
+                        {
+                            //wcout << endl;
+                            //print();
+                            //break;
+                            return foundVal;//*depth;
+                        }
+                        if (beta <= alpha)
+                        {
+                            break;
+                            //depthToPieces = 0;
+                        }
+                    }
+                }
+            }
+
+                //if (saveToVector) [[unlikely]]
+                    //return -std::numeric_limits<float>::max();
+
+
+                if (bestValue == (float)(std::numeric_limits<float>::infinity() * board.playerOnMove * (-1))) [[unlikely]]//Nemůžu udělat žádný legitimní tah (pat nebo mat)
+                    {
+                        TempSwap saveToVectorBackup(saveToVector, false);
+                        if (canTakeKing(oppositeSide(board.playerOnMove)))//if (round((bestMoveScore(1, onMove * (-1),valueSoFar, alpha, beta) * playerOnMove * (-1))/100) == kingPrice/100)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
+                        {
+                            bestValue = -matePrice * board.playerOnMove;//Dostanu mat, co nejnižší skóre
+                        }
+                        else
+                        {//Dostal bych pat, ten je vždycky lepší než dostat mat, ale chci ho docílit jen když prohrávám
+                            bestValue = 0;//When we return 0, stalemate is preffered only if losing (0 is better than negative)
+                            //if (valueSoFar * playerOnMove > 0)
+                            //{
+                            //    //std::cerr << "Stalemate not wanted for " << (unsigned)onMove << std::endl;
+                            //    bestValue = -stalePrice * playerOnMove;//Vedu, nechci dostat pat
+                            //}
+                            //else
+                            //{
+                            //    //std::cerr << "Stalemate wanted for "<< (unsigned)onMove << std::endl;
+                            //    bestValue = stalePrice * playerOnMove;//Prohrávám, dostat pat beru jako super tah
+                            //}  
+                        }
+                        bestValue *= depth;//To get shit done quickly
+                    }
+
+                        //if (depth > 3)
+                        //    transpositions.emplace(*this, bestValue);
+                    return bestValue;
+    }
+
+
+    auto tryPiece(i8 column, i8 row, Piece p, i8 depth, float alpha, float beta, float valueSoFar)
+    {
+        TempSwap pieceBackup(board.pieceAt(column, row), p);
+        board.playerOnMove = oppositeSide(board.playerOnMove);
+        auto tmp = bestMoveScore(depth, valueSoFar, alpha, beta);
+        board.playerOnMove = oppositeSide(board.playerOnMove);
+        return tmp;
+    }
+
+    void placePieceAt(Piece p, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, bool& doNotContinue, float valueSoFar, float priceTaken)
+    {
+        ++nodes;
+        if (saveToVector && depth == 0) [[unlikely]]
+        {
+
+            TempSwap backup(board.pieceAt(column, row), p);
+            board.playerOnMove = oppositeSide(board.playerOnMove);
+            if (isValidSetup())
+            {
+                //float pieceTakenValue = valueSoFar + priceAbsolute * pieceColor();
+                //board.print();
+                float balance = board.balance();
+                firstPositions.emplace_back(board, balance);
+            }
+            board.playerOnMove = oppositeSide(board.playerOnMove);
+            return;
+        }
+
+        //if (doNotContinue) [[unlikely]]
+        //    return;
+
+        if (priceTaken >= kingPrice - 128) [[unlikely]]//Je možné vzít krále
+        {
+            doNotContinue = true;
+            bestValue = kingPrice * board.playerOnMove;
+            //totalMoves++;
+            //return;
+        }
+        else [[likely]]
+        {
+            float valueGained = priceTaken + priceAdjustmentPov(p, column, row); //We are entering new position with this piece
+
+            const auto wholeMovesFromRoot = ((depthW - depth) / 2);//Kolikaty tah od initial pozice (od 0), ne pultah
+            valueGained *= (1 - (wholeMovesFromRoot * 0.0001));//10000.0);
+
+            valueSoFar += valueGained * board.playerOnMove;//Add our gained value to the score
+
+            float foundVal;
+            if (depth > 0)
+            {
+                foundVal = tryPiece(column, row, p, depth, alpha, beta, valueSoFar);
+
+                if ((foundVal * board.playerOnMove * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
+                    return;
+            }
+            else//leaf node of the search tree
+                foundVal = valueSoFar;
+
+            if (foundVal * board.playerOnMove > bestValue * board.playerOnMove)
+                bestValue = foundVal;
+        }
+
+        switch (board.playerOnMove)
+        {
+        case(PlayerSide::WHITE): {
+            alpha = std::max(alpha, bestValue);//bily maximalizuje hodnotu
+        } break;
+        case(PlayerSide::BLACK): {
+            beta = std::min(beta, bestValue);
+        } break;
+        default:
+            std::unreachable();
+        }
+
+        doNotContinue |= (beta <= alpha);
+    }
+
+
+    template <typename F>
+    bool tryPlacingPieceAt(Piece p, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, bool& doNotContinue, float valueSoFar, F condition)
+    {
+        if (doNotContinue)
+            return false;
+
+        float price = board.priceInLocation(column, row, board.playerOnMove);
+
+        if (condition(price, 0))
+        {
+            placePieceAt(p, column, row, depth, alpha, beta, bestValue, doNotContinue, valueSoFar, price);
+            return price == 0;
+        }
+        else
+            return false;
+    }
+
+    auto tryPlacingPieceAt(Piece p, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, bool& doNotContinue, float valueSoFar)
+    {
+        return tryPlacingPieceAt(p, column, row, depth, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_CAPTURE);
+    }
+
+    template <typename T>
+    bool addMoveToList(Piece p, i8 column, i8 row, float alpha, float beta, T& possibleMoves)
+    {
+        bool doNotContinueTmp = false;
+        float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
+        bool fieldWasFree = tryPlacingPieceAt(p, column, row, 0, alpha, beta, bestValue, doNotContinueTmp, 0);
+
+        if (bestValue != -std::numeric_limits<float>::infinity() * board.playerOnMove)
+            possibleMoves.emplace_back(bestValue, std::make_pair(column, row));
+
+        return fieldWasFree;
+    }
+
+    template <i8 rookColumn, i8 newRookColumn>
+    void tryCastling(Piece p, i8 row, /*i8 kingColumn, i8 rookColumn, i8 newRookColumn,*/ bool& canICastleLeft, bool& canICastleRight, float& bestValue, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNoContinue)
+    {
+        AssertAssume(row == 0 || row == 7);
+
+        constexpr i8 kingColumn = 4;
+        constexpr i8 sign = rookColumn < kingColumn ? 1 : -1;
+        constexpr i8 newKingColumn = kingColumn - 2 * sign;
+        /*Castling is permitted only if
+    - neither the king nor the rook has previously moved;
+    - the squares between the king and the rook are vacant;
+    - the king does not leave, cross over, or finish on a square attacked by an enemy piece.
+    */
+
+        for (i8 i = rookColumn + sign; i != kingColumn; i += sign)
+        {
+            if (board.pieceAt(i, row) != Piece::Nothing) [[likely]]//The path is not vacant
+                return;
+        }
+
+        auto pieceInCorner = board.pieceAt(rookColumn, row);
+        if (toGenericPiece(pieceInCorner) != PieceGeneric::Rook)//The piece in the corner is not a rook or is vacant
+            return;
+
+        if (saveToVector) [[unlikely]]//To optimize time, we do not check whether the path is attacked. May produce bad predictions, but only for small number of cases.
+            {
+                for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
+                {
+                    TempSwap fieldSwap(board.pieceAt(i, row), p);
+                    if (canTakeKing(oppositeSide(pieceColor(p)))) [[unlikely]]//The path is attacked by enemy
+                        {
+                            return;
+                        }
+                }
+            }
+
+                //Now we can be sure we can do the castling
+            valueSoFar -= priceAdjustmentPov(pieceInCorner, rookColumn, row);//Remove the position score of the rook, it is leaving
+            valueSoFar += priceAdjustmentPov(pieceInCorner, newRookColumn, row);//Add the score of the rook on the next position
+
+            //Castling is not allowed from this point onwards
+            TempSwap castleLeftBackup(canICastleLeft, false);
+            TempSwap castleRightBackup(canICastleRight, false);
+
+            //Do the actual piece movement
+            TempSwap rookBackup(board.pieceAt(rookColumn, row), Piece::Nothing);
+            TempSwap newRookBackup(board.pieceAt(newRookColumn, row), pieceInCorner);
+            tryPlacingPieceAt(p, newKingColumn, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+            //State will be restored when calling destructors
+    }
+
+    float bestMoveWithThisPieceScore(i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false)
+    {
+        float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
+
+        Piece p = board.pieceAt(column, row);
+        PieceGeneric piece = toGenericPiece(p);
+        PlayerSide color = pieceColor(p);
+
+        assert(color == board.playerOnMove);
+        if (color == board.playerOnMove)
+        {
+            board.pieceAt(column, row) = Piece::Nothing;
+            valueSoFar -= priceAdjustmentPov(p, column, row) * board.playerOnMove;//We are leaving our current position
+            //board.playerOnMove = oppositeSide(board.playerOnMove);
+
+            switch (piece)
+            {
+            case Nothing:
+                break;
+            case Pawn:
+            {
+                if (row + board.playerOnMove == promoteRow(board.playerOnMove)) [[unlikely]]
+                    {
+                        const auto& availableOptions = availablePromotes(p);//evolveIntoReference(row + advanceRow());
+                        for (const auto& evolveOption : availableOptions) {
+                            float valueDifferenceNextMove = (pricePiece(evolveOption) - pricePiece(piece)) * board.playerOnMove;//Increase in material when the pawn promotes
+                            float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
+
+                            //Capture diagonally
+                            tryPlacingPieceAt(evolveOption, column - 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+                            tryPlacingPieceAt(evolveOption, column + 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+
+                            //Go forward
+                            tryPlacingPieceAt(evolveOption, column, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
+                        }
+                    }
+                else [[likely]]
+                    {
+                        //Capture diagonally
+                        tryPlacingPieceAt(p, column - 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+                        tryPlacingPieceAt(p, column + 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+
+                        //Go forward
+                        bool goForwardSuccessful = tryPlacingPieceAt(p, column, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+                        if (goForwardSuccessful) [[likely]]//Field in front of the pawn is empty, can make a second step
+                            {
+                                if (row == initialRow(p))//Two fields forward
+                                {
+                                    tryPlacingPieceAt(p, column, row + board.playerOnMove * 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+                                }
+                            }
+                    }
+
+            } break;
+            case Knight:
+            {
+                tryPlacingPieceAt(p, column + 1, row + 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                tryPlacingPieceAt(p, column + 1, row - 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                tryPlacingPieceAt(p, column + 2, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                tryPlacingPieceAt(p, column + 2, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                tryPlacingPieceAt(p, column - 1, row + 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                tryPlacingPieceAt(p, column - 1, row - 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                tryPlacingPieceAt(p, column - 2, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                tryPlacingPieceAt(p, column - 2, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+
+            } break;
+            case Bishop:
+            {
+                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+            } break;
+            case Rook:
+            {
+                bool castleLeftBackup;
+                bool castleRightBackup;
+
+                if (initialRow(p) == row)
+                {
+                    if (column == 0)
+                    {
+                        bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
+                        castleLeftBackup = canICastleLeft;
+                        canICastleLeft = false;
+                    }
+                    else if (column == 7)
+                    {
+                        bool& canICastleRight = board.canCastleRight[(board.playerOnMove + 1) / 2];
+                        castleRightBackup = canICastleRight;
+                        canICastleRight = false;
+                    }
+                }
+
+                for (i8 i = 1; tryPlacingPieceAt(p, column, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+
+                if (initialRow(p) == row)
+                {
+                    if (column == 0)
+                    {
+                        bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
+                        canICastleLeft = castleLeftBackup;
+                    }
+                    else if (column == 7)
+                    {
+                        bool& canICastleRight = board.canCastleRight[(board.playerOnMove + 1) / 2];
+                        canICastleRight = castleRightBackup;
+                    }
+                }
+            } break;
+            case Queen:
+            {
+                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+
+                for (i8 i = 1; tryPlacingPieceAt(p, column, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+
+            } break;
+            case King:
+            {
+                bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
+                bool& canICastleRight = board.canCastleLeft[(board.playerOnMove + 1) / 2];
+
+
+#ifndef CASTLING_DISABLED
+                if (canICastleLeft)//Neither has moved
+                {
+                    AssertAssume(column == 4);//King has to be in initial position
+                    AssertAssume(row == 0 || row == 7);
+                    tryCastling<0, 3>(p, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, valueSoFar, doNotContinue);
+                }
+                if (canICastleRight)//Neither has moved
+                {
+                    AssertAssume(column == 4);//King has to be in initial position
+                    AssertAssume(row == 0 || row == 7);
+                    tryCastling<7, 5>(p, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, valueSoFar, doNotContinue);
+                }
+#endif
+
+                //Classic king movement
+                {
+                    TempSwap castleLeftBackup(canICastleLeft, false);
+                    TempSwap castleRightBackup(canICastleLeft, false);
+
+                    tryPlacingPieceAt(p, column + 1, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                    tryPlacingPieceAt(p, column + 1, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                    tryPlacingPieceAt(p, column + 1, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                    tryPlacingPieceAt(p, column - 1, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                    tryPlacingPieceAt(p, column - 1, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                    tryPlacingPieceAt(p, column - 1, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                    tryPlacingPieceAt(p, column, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                    tryPlacingPieceAt(p, column, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+                }
+            } break;
+            default:
+                std::unreachable();
+            }
+
+            board.pieceAt(column, row) = p;
+        }
+
+        return bestValue;
+    }
+
+    //float bestMoveWithThisPieceScore(Piece p, Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false)
+    //{
+    //    return bestMoveWithThisPieceScore(toGenericPiece(p), board, column, row, depth, alpha, beta, valueSoFar, doNotContinue);
+    //}
+
+    float bestMoveWithThisPieceScoreOrdered(i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false)
+    {
+        //return bestMoveWithThisPieceScore(board, column, row, depth, alpha, beta, valueSoFar, doNotContinue);
+        Piece p = board.pieceAt(column, row);
+        PieceGeneric piece = toGenericPiece(p);
+        PlayerSide color = pieceColor(p);
+
+        switch (piece)
+        {
+        case Pawn:
+        case Rook:
+        case King:
+            return bestMoveWithThisPieceScore(column, row, depth, alpha, beta, valueSoFar, doNotContinue);
+        }
+        float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
         board.pieceAt(column, row) = Piece::Nothing;
         valueSoFar -= priceAdjustmentPov(p, column, row) * board.playerOnMove;//We are leaving our current position
         //board.playerOnMove = oppositeSide(board.playerOnMove);
+
+        static_vector<std::pair<float, std::pair<i8, i8>>, 27> possibleMoves;
 
         switch (piece)
         {
@@ -1277,303 +1455,118 @@ float bestMoveWithThisPieceScore(Board& board, i8 column, i8 row, i8 depth, floa
             break;
         case Pawn:
         {
-            if (row + board.playerOnMove == promoteRow(board.playerOnMove)) [[unlikely]]
-                {
-                    const auto& availableOptions = availablePromotes(p);//evolveIntoReference(row + advanceRow());
-                    for (const auto& evolveOption : availableOptions) {
-                        float valueDifferenceNextMove = (pricePiece(evolveOption) - pricePiece(piece)) * board.playerOnMove;//Increase in material when the pawn promotes
-                        float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
-
-                        //Capture diagonally
-                        tryPlacingPieceAt(evolveOption, board, column - 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-                        tryPlacingPieceAt(evolveOption, board, column + 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-
-                        //Go forward
-                        tryPlacingPieceAt(evolveOption, board, column, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
-                    }
-                }
-            else [[likely]]
-                {
-                    //Capture diagonally
-                    tryPlacingPieceAt(p, board, column - 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
-                    tryPlacingPieceAt(p, board, column + 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
-
-                    //Go forward
-                    bool goForwardSuccessful = tryPlacingPieceAt(p, board, column, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
-                    if (goForwardSuccessful) [[likely]]//Field in front of the pawn is empty, can make a second step
-                        {
-                            if (row == initialRow(p))//Two fields forward
-                            {
-                                tryPlacingPieceAt(p, board, column, row + board.playerOnMove * 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
-                            }
-                        }
-                }
-
+            //TODO
         } break;
         case Knight:
         {
-            tryPlacingPieceAt(p, board, column + 1, row + 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            tryPlacingPieceAt(p, board, column + 1, row - 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            tryPlacingPieceAt(p, board, column + 2, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            tryPlacingPieceAt(p, board, column + 2, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            tryPlacingPieceAt(p, board, column - 1, row + 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            tryPlacingPieceAt(p, board, column - 1, row - 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            tryPlacingPieceAt(p, board, column - 2, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            tryPlacingPieceAt(p, board, column - 2, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+            //static_vector<std::pair<float, std::pair<i8, i8>>, 8> possibleMoves;
+
+            addMoveToList(p, column + 1, row + 2, alpha, beta, possibleMoves);
+            addMoveToList(p, column + 1, row - 2, alpha, beta, possibleMoves);
+            addMoveToList(p, column + 2, row + 1, alpha, beta, possibleMoves);
+            addMoveToList(p, column + 2, row - 1, alpha, beta, possibleMoves);
+            addMoveToList(p, column - 1, row + 2, alpha, beta, possibleMoves);
+            addMoveToList(p, column - 1, row - 2, alpha, beta, possibleMoves);
+            addMoveToList(p, column - 2, row + 1, alpha, beta, possibleMoves);
+            addMoveToList(p, column - 2, row - 1, alpha, beta, possibleMoves);
 
         } break;
         case Bishop:
         {
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column + i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column + i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column - i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column - i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+            //static_vector<std::pair<float, std::pair<i8, i8>>, 13> possibleMoves;
+
+            for (i8 i = 1; addMoveToList(p, column + i, row + i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column + i, row - i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column - i, row + i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column - i, row - i, alpha, beta, possibleMoves); ++i);
         } break;
         case Rook:
         {
-            bool castleLeftBackup;
-            bool castleRightBackup;
+            //TODO castling how to?
 
-            if (initialRow(p) == row)
-            {
-                if (column == 0)
-                {
-                    bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
-                    castleLeftBackup = canICastleLeft;
-                    canICastleLeft = false;
-                }
-                else if (column == 7)
-                {
-                    bool& canICastleRight = board.canCastleRight[(board.playerOnMove + 1) / 2];
-                    castleRightBackup = canICastleRight;
-                    canICastleRight = false;
-                }
-            }
+            //bool castleLeftBackup;
+            //bool castleRightBackup;
 
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column + i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column - i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
+            //if (initialRow(p) == row)
+            //{
+            //    if (column == 0)
+            //    {
+            //        bool& canICastleLeft = board.canCastleLeft[(pieceColor(p) + 1) / 2];
+            //        castleLeftBackup = canICastleLeft;
+            //        canICastleLeft = false;
+            //    }
+            //    else if (column == 7)
+            //    {
+            //        bool& canICastleRight = board.canCastleRight[(pieceColor(p) + 1) / 2];
+            //        castleRightBackup = canICastleRight;
+            //        canICastleRight = false;
+            //    }
+            //}
 
-            if (initialRow(p) == row)
-            {
-                if (column == 0)
-                {
-                    bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
-                    canICastleLeft = castleLeftBackup;
-                }
-                else if (column == 7)
-                {
-                    bool& canICastleRight = board.canCastleRight[(board.playerOnMove + 1) / 2];
-                    canICastleRight = castleRightBackup;
-                }
-            }
+            //for (i8 i = 1; addMoveToList(p, board, column + i, row, alpha, beta, possibleMoves); ++i);
+            //for (i8 i = 1; addMoveToList(p, board, column - i, row, alpha, beta, possibleMoves); ++i);
+            //for (i8 i = 1; addMoveToList(p, board, column, row + i, alpha, beta, possibleMoves); ++i);
+            //for (i8 i = 1; addMoveToList(p, board, column, row - i, alpha, beta, possibleMoves); ++i);
+
+
+            //if (initialRow(p) == row)
+            //{
+            //    if (column == 0)
+            //    {
+            //        bool& canICastleLeft = board.canCastleLeft[(pieceColor(p) + 1) / 2];
+            //        canICastleLeft = castleLeftBackup;
+            //    }
+            //    else if (column == 7)
+            //    {
+            //        bool& canICastleRight = board.canCastleRight[(pieceColor(p) + 1) / 2];
+            //        canICastleRight = castleRightBackup;
+            //    }
+            //}
         } break;
         case Queen:
         {
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column + i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column + i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column - i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column - i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column + i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-            for (i8 i = 1; tryPlacingPieceAt(p, board, column - i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
-
+            for (i8 i = 1; addMoveToList(p, column + i, row + i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column + i, row - i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column - i, row + i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column - i, row - i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column + i, row, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column - i, row, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column, row + i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column, row - i, alpha, beta, possibleMoves); ++i);
         } break;
         case King:
         {
-            bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
-            bool& canICastleRight = board.canCastleLeft[(board.playerOnMove + 1) / 2];
-
-
-#ifndef CASTLING_DISABLED
-            if (canICastleLeft)//Neither has moved
-            {
-                AssertAssume(column == 4);//King has to be in initial position
-                AssertAssume(row == 0 || row == 7);
-                tryCastling<0, 3>(p, board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, valueSoFar, doNotContinue);
-            }
-            if (canICastleRight)//Neither has moved
-            {
-                AssertAssume(column == 4);//King has to be in initial position
-                AssertAssume(row == 0 || row == 7);
-                tryCastling<7, 5>(p, board, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, valueSoFar, doNotContinue);
-            }
-#endif
-
-            //Classic king movement
-            {
-                TempSwap castleLeftBackup(canICastleLeft, false);
-                TempSwap castleRightBackup(canICastleLeft, false);
-
-                tryPlacingPieceAt(p, board, column + 1, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-                tryPlacingPieceAt(p, board, column + 1, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-                tryPlacingPieceAt(p, board, column + 1, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-                tryPlacingPieceAt(p, board, column - 1, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-                tryPlacingPieceAt(p, board, column - 1, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-                tryPlacingPieceAt(p, board, column - 1, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-                tryPlacingPieceAt(p, board, column, row + 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-                tryPlacingPieceAt(p, board, column, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-            }
+            //TODO castling
         } break;
         default:
             std::unreachable();
         }
 
+        switch (board.playerOnMove)
+        {
+        case PlayerSide::WHITE: {
+            std::sort(possibleMoves.begin(), possibleMoves.end(), [](auto& left, auto& right) {return left.first > right.first; });
+        } break;
+        case PlayerSide::BLACK: {
+            std::sort(possibleMoves.begin(), possibleMoves.end(), [](auto& left, auto& right) {return left.first < right.first; });
+        } break;
+        default:
+            std::unreachable();
+        }
+
+        for (const auto& i : possibleMoves)
+            tryPlacingPieceAt(p, i.second.first, i.second.second, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
+
+
+        //board.playerOnMove = oppositeSide(board.playerOnMove);
         board.pieceAt(column, row) = p;
+
+        return bestValue;
     }
-    
-    return bestValue;
-}
-
-//float bestMoveWithThisPieceScore(Piece p, Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false)
-//{
-//    return bestMoveWithThisPieceScore(toGenericPiece(p), board, column, row, depth, alpha, beta, valueSoFar, doNotContinue);
-//}
-
-float bestMoveWithThisPieceScoreOrdered(Board& board, i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue)
-{
-    //return bestMoveWithThisPieceScore(board, column, row, depth, alpha, beta, valueSoFar, doNotContinue);
-    Piece p = board.pieceAt(column, row);
-    PieceGeneric piece = toGenericPiece(p);
-    PlayerSide color = pieceColor(p);
-
-    switch (piece)
-    {
-    case Pawn:
-    case Rook:
-    case King:
-        return bestMoveWithThisPieceScore(board, column, row, depth, alpha, beta, valueSoFar, doNotContinue);
-    }
-    float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
-    board.pieceAt(column, row) = Piece::Nothing;
-    valueSoFar -= priceAdjustmentPov(p, column, row) * board.playerOnMove;//We are leaving our current position
-    //board.playerOnMove = oppositeSide(board.playerOnMove);
-
-    static_vector<std::pair<float, std::pair<i8, i8>>, 27> possibleMoves;
-
-    switch (p)
-    {
-    case Nothing:
-        break;
-    case PawnWhite:
-    case PawnBlack:
-    {
-        //TODO
-    } break;
-    case KnightWhite:
-    case KnightBlack:
-    {
-        //static_vector<std::pair<float, std::pair<i8, i8>>, 8> possibleMoves;
-
-        addMoveToList(p, board, column + 1, row + 2, alpha, beta, possibleMoves);
-        addMoveToList(p, board, column + 1, row - 2, alpha, beta, possibleMoves);
-        addMoveToList(p, board, column + 2, row + 1, alpha, beta, possibleMoves);
-        addMoveToList(p, board, column + 2, row - 1, alpha, beta, possibleMoves);
-        addMoveToList(p, board, column - 1, row + 2, alpha, beta, possibleMoves);
-        addMoveToList(p, board, column - 1, row - 2, alpha, beta, possibleMoves);
-        addMoveToList(p, board, column - 2, row + 1, alpha, beta, possibleMoves);
-        addMoveToList(p, board, column - 2, row - 1, alpha, beta, possibleMoves);
-
-    } break;
-    case BishopWhite:
-    case BishopBlack:
-    {
-        //static_vector<std::pair<float, std::pair<i8, i8>>, 13> possibleMoves;
-
-        for (i8 i = 1; addMoveToList(p, board, column + i, row + i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column + i, row - i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column - i, row + i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column - i, row - i, alpha, beta, possibleMoves); ++i);
-    } break;
-    case RookWhite:
-    case RookBlack:
-    {
-        //TODO castling how to?
-        
-        //bool castleLeftBackup;
-        //bool castleRightBackup;
-
-        //if (initialRow(p) == row)
-        //{
-        //    if (column == 0)
-        //    {
-        //        bool& canICastleLeft = board.canCastleLeft[(pieceColor(p) + 1) / 2];
-        //        castleLeftBackup = canICastleLeft;
-        //        canICastleLeft = false;
-        //    }
-        //    else if (column == 7)
-        //    {
-        //        bool& canICastleRight = board.canCastleRight[(pieceColor(p) + 1) / 2];
-        //        castleRightBackup = canICastleRight;
-        //        canICastleRight = false;
-        //    }
-        //}
-
-        //for (i8 i = 1; addMoveToList(p, board, column + i, row, alpha, beta, possibleMoves); ++i);
-        //for (i8 i = 1; addMoveToList(p, board, column - i, row, alpha, beta, possibleMoves); ++i);
-        //for (i8 i = 1; addMoveToList(p, board, column, row + i, alpha, beta, possibleMoves); ++i);
-        //for (i8 i = 1; addMoveToList(p, board, column, row - i, alpha, beta, possibleMoves); ++i);
+};
 
 
-        //if (initialRow(p) == row)
-        //{
-        //    if (column == 0)
-        //    {
-        //        bool& canICastleLeft = board.canCastleLeft[(pieceColor(p) + 1) / 2];
-        //        canICastleLeft = castleLeftBackup;
-        //    }
-        //    else if (column == 7)
-        //    {
-        //        bool& canICastleRight = board.canCastleRight[(pieceColor(p) + 1) / 2];
-        //        canICastleRight = castleRightBackup;
-        //    }
-        //}
-    } break;
-    case QueenWhite:
-    case QueenBlack:
-    {
-        for (i8 i = 1; addMoveToList(p, board, column + i, row + i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column + i, row - i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column - i, row + i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column - i, row - i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column + i, row, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column - i, row, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column, row + i, alpha, beta, possibleMoves); ++i);
-        for (i8 i = 1; addMoveToList(p, board, column, row - i, alpha, beta, possibleMoves); ++i);
-    } break;
-    case KingWhite:
-    case KingBlack:
-    {
-        //TODO castling
-    } break;
-    default:
-        std::unreachable();
-    }
 
-    switch (board.playerOnMove)
-    {
-    case PlayerSide::WHITE: {
-        std::sort(possibleMoves.begin(), possibleMoves.end(), [](auto& left, auto& right) {return left.first > right.first; });
-    } break;
-    case PlayerSide::BLACK: {
-        std::sort(possibleMoves.begin(), possibleMoves.end(), [](auto& left, auto& right) {return left.first < right.first; });
-    } break;
-    default:
-        std::unreachable();
-    }
-
-    for (const auto& i : possibleMoves)
-        tryPlacingPieceAt(p, board, i.second.first, i.second.second, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
-
-
-    //board.playerOnMove = oppositeSide(board.playerOnMove);
-    board.pieceAt(column, row) = p;
-
-    return bestValue;
-}
 
 
 //template <typename T>
@@ -1617,10 +1610,14 @@ void printLowerBound()
     }
 
 }
-void evaluateGameMove(GameMove& board, i8 depth)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
+
+std::atomic<size_t> totalNodesDepth;
+size_t totalNodesAll;
+
+void evaluateGameMove(Variation& board, i8 depth)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
 {
     //auto timeStart = std::chrono::high_resolution_clock::now();
-    Board localBoard(board.researchedBoard);
+    Variation localBoard(board);
 
     if (options.MultiPV > 1) [[unlikely]]//If we want to know multiple good moves, we cannot prune using a/B at root level
     {
@@ -1630,7 +1627,7 @@ void evaluateGameMove(GameMove& board, i8 depth)//, double alpha = -std::numeric
 
     else
     {
-        switch (localBoard.playerOnMove)
+        switch (localBoard.board.playerOnMove)
         {
         case PlayerSide::BLACK: {
             board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, alphaOrBeta, std::numeric_limits<float>::infinity());
@@ -1648,10 +1645,12 @@ void evaluateGameMove(GameMove& board, i8 depth)//, double alpha = -std::numeric
         //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
         printLowerBound();
     }
+
+    totalNodesDepth += localBoard.nodes;
 }
 
 
-static std::vector<GameMove*> q;
+static std::vector<Variation*> q;
 static std::atomic<size_t> qPos;
 
 void evaluateGameMoveFromQ(size_t posInQ, i8 depth)
@@ -1682,13 +1681,13 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
             
         auto& tmp = *q[localPos];
 
-        AssertAssume(tmp.researchedBoard.playerOnMove == onMoveW);
+        AssertAssume(tmp.board.playerOnMove == onMoveW);
 
         evaluateGameMoveFromQ(localPos, depthW);
     }
 }
 
-void cutoffBadMoves(std::vector<GameMove>& boards)
+void cutoffBadMoves(std::vector<Variation>& boards)
 {
     float bestMoveScore = boards.front().bestFoundValue;
 
@@ -1709,12 +1708,15 @@ void cutoffBadMoves(std::vector<GameMove>& boards)
 
 
 
-void printMoveInfo(unsigned depth, const double &elapsedTotal, const GameMove& move, size_t moveRank, bool upperbound, PlayerSide pov)
+void printMoveInfo(unsigned depth, const std::chrono::duration<float, std::milli>& elapsedTotal, const std::chrono::duration<float, std::milli> &elapsedDepth, const size_t& nodesDepth, const Variation& move, size_t moveRank, bool upperbound, PlayerSide pov)
 {
+    //auto elapsedTotal = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
     out
         << "info "
         << "depth " << unsigned(depth) << ' '
-        << "time " << round(elapsedTotal) << ' '
+        << "time "  << (size_t)round(elapsedTotal.count()) << ' '
+        << "nodes " << totalNodesAll << ' '
+        << "nps " << (size_t)round((nodesDepth / elapsedDepth.count())*1000)<< ' '
         ;
     printScore(out, move.bestFoundValue, depth, pov) << ' ';
     if (upperbound)
@@ -1725,15 +1727,16 @@ void printMoveInfo(unsigned depth, const double &elapsedTotal, const GameMove& m
         << nl;
 }
 
-std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMove>& boards, i8 depth)//, PlayerSide onMove)
+std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, PlayerSide onMove)
 {
     AssertAssume(!boards.empty());
-    PlayerSide onMoveResearched = boards.front().researchedBoard.playerOnMove;
-    depth -= boards.front().researchedDepth;
+    PlayerSide onMoveResearched = boards.front().board.playerOnMove;
+    depth -= boards.front().variationDepth;
+    totalNodesDepth = 0;
 
     //Check if all boards are from the same POV. Required for the a/B to work.
     for (const auto& i : boards)
-        assert(i.researchedBoard.playerOnMove == onMoveResearched);
+        assert(i.board.playerOnMove == onMoveResearched);
 
 #ifdef _DEBUG
     const size_t threadCount = 1;
@@ -1775,7 +1778,7 @@ std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMov
         q.clear();
         //transpositions.clear();
     }
-    auto elapsedThis = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeThisStarted);
+    totalNodesAll += totalNodesDepth;
 
     if (qPos != boards.size())
     {
@@ -1787,20 +1790,20 @@ std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMov
     switch (onMoveResearched)
     {
     case PlayerSide::WHITE: {
-        std::stable_sort(boards.begin(), boards.end(), std::less<GameMove>());
+        std::stable_sort(boards.begin(), boards.end(), std::less<Variation>());
     } break;
     case PlayerSide::BLACK: {
-        std::stable_sort(boards.begin(), boards.end(), std::greater<GameMove>());
+        std::stable_sort(boards.begin(), boards.end(), std::greater<Variation>());
     } break;
     default:
         std::unreachable();
     }
-    
 
+    auto elapsedThis = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeThisStarted);
     auto elapsedTotal = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
 
 
-    float scoreCp = boards.front().bestFoundValue;
+    //float scoreCp = boards.front().bestFoundValue;
     //std::cerr << "ScoreCP: " << scoreCp << std::endl;
 
     //if (itsTimeToStop)
@@ -1808,9 +1811,9 @@ std::chrono::duration<float, std::milli> findBestOnSameLevel(std::vector<GameMov
 
 
     for (size_t i = boards.size()-1; i != 0; --i)
-        printMoveInfo(depth + 1, elapsedTotal.count(), boards[i], i + 1, options.MultiPV == 1, oppositeSide(onMoveW));
+        printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, options.MultiPV == 1, oppositeSide(onMoveW));
 
-    printMoveInfo(depth + 1, elapsedTotal.count(), boards.front(), 1, false, oppositeSide(onMoveW));
+    printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards.front(), 1, false, oppositeSide(onMoveW));
 
     std::cout << std::flush;
 
@@ -1828,7 +1831,7 @@ void timeLimit(int milliseconds, bool * doNotStop)
 }
 
 
-std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//, i8 depth = 1
+std::vector<Variation> generateMoves(Board& board, PlayerSide bestForWhichSide)//, i8 depth = 1
 {
     static auto rd = std::random_device{};
     static auto rng = std::default_random_engine{ rd() };
@@ -1837,26 +1840,33 @@ std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//
     itsTimeToStop = false;
     onMoveW = board.playerOnMove;
     depthW = 1;
-    saveToVector = true;
+    totalNodesDepth = 0;
+    totalNodesAll = 0;
+    //saveToVector = true;
 
     out << "info depth 1" << nl << std::flush;
     //transpositions.clear();
-    board.bestMoveScore(1, 0, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+    Variation tmp(board, 0, 0, 1, board.playerOnMove, std::array<char,6>{ '\0' });
+    tmp.saveToVector = true;
+    tmp.bestMoveScore(1, 0, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+    totalNodesDepth = tmp.nodes;
+    totalNodesAll = totalNodesDepth;
     //transpositions.clear();
-    auto res = std::move(firstPositions);
-    firstPositions.clear();
+    std::vector<Variation> res;// = std::move(firstPositions);
+    res.reserve(tmp.firstPositions.size());
 
     //Add move names
-    for (auto& pos : res)
+    for (auto& pos : tmp.firstPositions)
     {
+        res.emplace_back(pos.first, pos.second, pos.second, depth, pos.first.playerOnMove, pos.first.findDiff(board));
         //pos.startingValue *= bestForWhichSide;//To our POV
         //pos.bestFoundValue *= bestForWhichSide;//To our POV
-        pos.firstMoveNotation = pos.researchedBoard.findDiff(board);
-        pos.researchedDepth = depth;
-        pos.firstMoveOnMove = pos.researchedBoard.playerOnMove;
+        //pos.firstMoveNotation = pos.board.findDiff(board);
+        //pos.variationDepth = depth;
+        //pos.firstMoveOnMove = pos.board.playerOnMove;
         //pos.movePosition = pos.researchedBoard;
     }
-
+    //firstPositions.clear();
     //if (depth > 1)
     //{
     //    auto firstMoves = std::move(res);
@@ -1874,7 +1884,7 @@ std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//
     //        {
     //            auto& move = firstPositions[i];
     //            move.firstMoveNotation = pos.firstMoveNotation;
-    //            move.researchedDepth = pos.researchedDepth;
+    //            move.variationDepth = pos.variationDepth;
     //            move.firstMoveOnMove = pos.firstMoveOnMove;
     //            //move.startingValue = pos.startingValue;
     //            //move.movePosition = pos.movePosition;
@@ -1885,7 +1895,7 @@ std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//
     //    firstPositions.clear();
     //}
 
-    saveToVector = false;
+    //saveToVector = false;
 
     if (!deterministic)
     {
@@ -1895,19 +1905,19 @@ std::vector<GameMove> generateMoves(Board& board, PlayerSide bestForWhichSide)//
     switch (bestForWhichSide)
     {
     case PlayerSide::WHITE: {
-        std::sort(res.begin(), res.end(), std::greater<GameMove>());
+        std::sort(res.begin(), res.end(), std::greater<Variation>());
     } break;
     case PlayerSide::BLACK: {
-        std::sort(res.begin(), res.end(), std::less<GameMove>());
+        std::sort(res.begin(), res.end(), std::less<Variation>());
     } break;
     default:
         std::unreachable();
     }
 
-    auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
+    auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
 
     for (size_t i = res.size()-1;i!=(size_t)(-1); --i)
-        printMoveInfo(depth, elapsedTotal, res[i], i + 1, false, bestForWhichSide);
+        printMoveInfo(depth, elapsedTotal, elapsedTotal, totalNodesDepth, res[i], i + 1, false, bestForWhichSide);
 
     std::cout << std::flush;
 
@@ -1919,7 +1929,7 @@ std::pair<Board, float> findBestOnTopLevel(Board& board, i8 depth, PlayerSide on
     auto tmp = generateMoves(board, onMove);//, onMove);
     findBestOnSameLevel(tmp, depth - 1);//, oppositeSide(onMove));
     const auto& res = tmp.front();
-    return { res.researchedBoard, res.bestFoundValue };
+    return { res.board, res.bestFoundValue };
 }
 
 
@@ -2121,7 +2131,7 @@ Board posFromString(std::string_view str)
 }
 
 
-GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = true)
+Variation findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = true)
 {
     //dynamicPositionRanking = false;
     timeGlobalStarted = std::chrono::high_resolution_clock::now();
@@ -2139,7 +2149,7 @@ GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = tr
     //    boardList[i].researchedBoard.print();
     //}
 
-    GameMove res;
+    Variation res;
     //dynamicPositionRanking = true;
 
     std::wcout << "Depth: ";
@@ -2177,7 +2187,7 @@ GameMove findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = tr
     return res;
 }
 
-GameMove findBestInNumberOfMoves(Board& board, i8 moves)
+Variation findBestInNumberOfMoves(Board& board, i8 moves)
 {
     timeGlobalStarted = std::chrono::high_resolution_clock::now();
     //dynamicPositionRanking = false;
@@ -2191,7 +2201,7 @@ GameMove findBestInNumberOfMoves(Board& board, i8 moves)
     //}
     //boardList.erase(boardList.begin());
 
-    GameMove res;
+    Variation res;
     //dynamicPositionRanking = true;
 
     std::wcout << "Depth: ";
@@ -2357,7 +2367,7 @@ int uci(std::istream& in)
             auto boardList = generateMoves(board,board.playerOnMove);
             //dynamicPositionRanking = true;
 
-            GameMove bestPosFound;
+            Variation bestPosFound;
 
             std::vector<std::pair<double, float>> previousResults;
 
