@@ -275,9 +275,9 @@ constexpr PieceGeneric toGenericPiece(Piece p)
     return (PieceGeneric)((p >= 0) ? p : -p);
     //return static_cast<PieceGeneric>(std::abs(p));
 }
-constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
+constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
 {
-    AssertAssume(column < 8 && row < 8 && column >= 0 && row >= 0);
+    //AssertAssume(column < 8 && row < 8 && column >= 0 && row >= 0);
     switch (p)
     {
     case Nothing:
@@ -294,7 +294,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
 -35,  -1, -20, -23, -15,  24, 38, -22,
   0,   0,   0,   0,   0,   0,  0,   0,
         };
-        return arr[row * 8 + column];
+        return arr[pieceIndex];
     }
     case Knight:
     {
@@ -308,7 +308,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
  -29, -53, -12,  -3,  -1,  18, -14,  -19,
 -105, -21, -58, -33, -17, -28, -19,  -23,
         };
-        return arr[row * 8 + column];
+        return arr[pieceIndex];
     }
     case Bishop:
     {
@@ -322,7 +322,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
   4,  15,  16,   0,   7,  21,  33,   1,
 -33,  -3, -14, -21, -13, -12, -39, -21,
         };
-        return arr[row * 8 + column];
+        return arr[pieceIndex];
     }
     case Rook:
     {
@@ -336,7 +336,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
 -44, -16, -20,  -9, -1, 11,  -6, -71,
 -19, -13,   1,  17, 16,  7, -37, -26,
         };
-        return arr[row * 8 + column];
+        return arr[pieceIndex];
     }
     case Queen:
     {
@@ -350,7 +350,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
 -35,  -8,  11,   2,   8,  15,  -3,   1,
  -1, -18,  -9,  10, -15, -25, -31, -50,
         };
-        return arr[row * 8 + column];
+        return arr[pieceIndex];
     }
     case King:
     {
@@ -364,7 +364,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 column, i8 row)
   1,   7,  -8, -64, -43, -16,   9,   8,
 -15,  36,  12, -54,   8, -28,  24,  14,
         };
-        return arr[row * 8 + column];
+        return arr[pieceIndex];
     }
     default:
         std::unreachable();
@@ -379,11 +379,11 @@ constexpr float priceAdjustmentPov(Piece p, i8 column, i8 row)
 {
     if (p < 0)//case(PlayerSide::BLACK):
     {
-        return priceAdjustment((PieceGeneric)(-p), column, row);
+        return priceAdjustment((PieceGeneric)(-p), toIndex(column, row));
     }
     else//case(PlayerSide::WHITE):
     {
-        return priceAdjustment((PieceGeneric)p, column, 7 - row);
+        return priceAdjustment((PieceGeneric)p, toIndex(column, 7 - row));
     }
 }
 
