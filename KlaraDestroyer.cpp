@@ -548,9 +548,12 @@ public:
         //}
     }
 
+    constexpr Board(std::array<Piece, 64> pieces, PlayerSide playerOnMove, std::array<bool, 2> canCastleLeft, std::array<bool, 2> canCastleRight):pieces(pieces),playerOnMove(playerOnMove),canCastleLeft(canCastleLeft),canCastleRight(canCastleRight)
+    {}
+
     Board& operator=(const Board& copy) = default;
 
-    std::array<i8, 128> piecesCount() const
+    constexpr std::array<i8, 128> piecesCount() const
     {
         std::array<i8, 128> res { 0 };
         for (const auto& i : pieces)
@@ -561,7 +564,7 @@ public:
         return res;
     }
 
-    float priceInLocation(i8 column, i8 row, PlayerSide playerColor) const
+    constexpr float priceInLocation(i8 column, i8 row, PlayerSide playerColor) const
     {
         if (column < 0 || column > 7 || row < 0 || row > 7)
             return -std::numeric_limits<float>::infinity();
@@ -576,25 +579,25 @@ public:
             return priceRelative(piece, column, row) * (-playerColor);
     }
 
-    const Piece& pieceAt(i8 column, i8 row) const
+    constexpr const Piece& pieceAt(i8 column, i8 row) const
     {
         AssertAssume (!(column < 0 || column > 7 || row < 0 || row > 7));
         return pieces[column + (row * 8)];
     }
-    Piece& pieceAt(i8 column, i8 row)
+    constexpr Piece& pieceAt(i8 column, i8 row)
     {
         AssertAssume(!(column < 0 || column > 7 || row < 0 || row > 7));
         return pieces[column + (row * 8)];
     }
 
-    const Piece& pieceAt(char column, char row) const
+    constexpr const Piece& pieceAt(char column, char row) const
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
             throw std::exception("Invalid coordinates");
         else
             return pieceAt((i8)(column - 'a'), (i8)(row - '1'));
     }
-    Piece& pieceAt(char column, char row)
+    constexpr Piece& pieceAt(char column, char row)
     {
         if (column < 'a' || column>'h' || row < '1' || row>'8')
             throw std::exception("Invalid coordinates");
@@ -602,7 +605,7 @@ public:
             return pieceAt((i8)(column - 'a'), (i8)(row - '1'));
     }
 
-    void movePiece(char columnFrom, char rowFrom, char columnTo, char rowTo)
+    constexpr void movePiece(char columnFrom, char rowFrom, char columnTo, char rowTo)
     {
         auto& from = pieceAt(columnFrom, rowFrom);
         auto& to = pieceAt(columnTo, rowTo);
@@ -659,7 +662,7 @@ public:
     }
 
 
-    std::array<char, 6> findDiff(const Board& old)
+    std::array<char, 6> findDiff(const Board& old) const
     {
         std::array<char, 6> res = { 0 };
 
@@ -699,7 +702,7 @@ public:
         return res;
     }
     
-    float balance() const {
+    constexpr float balance() const {
         double res = 0;
         for (i8 i = 0; i < 64; ++i) {
             if (pieces[i] == Piece::Nothing) [[likely]]//Just optimization
@@ -712,7 +715,7 @@ public:
     }
 
     
-    i8 countPiecesMin() const
+    constexpr i8 countPiecesMin() const
     {
         std::array<i8, 2> counters{ 0 };
         for (const auto& i : pieces)
@@ -721,6 +724,65 @@ public:
                 ++counters[(pieceColor(i) + 1)/2];
         }
         return std::min(counters[0], counters[1]);
+    }
+
+    constexpr static Board startingPosition()
+    {
+        return Board(
+            {
+                Piece::RookWhite, Piece::KnightWhite, Piece::BishopWhite, Piece::QueenWhite, Piece::KingWhite, Piece::BishopWhite, Piece::KnightWhite, Piece::RookWhite,
+                Piece::PawnWhite, Piece::PawnWhite, Piece::PawnWhite, Piece::PawnWhite, Piece::PawnWhite, Piece::PawnWhite, Piece::PawnWhite, Piece::PawnWhite,
+                Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing,
+                Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing,
+                Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing,
+                Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing, Piece::Nothing,
+                Piece::PawnBlack, Piece::PawnBlack, Piece::PawnBlack, Piece::PawnBlack, Piece::PawnBlack, Piece::PawnBlack, Piece::PawnBlack, Piece::PawnBlack,
+                Piece::RookBlack, Piece::KnightBlack, Piece::BishopBlack, Piece::QueenBlack, Piece::KingBlack, Piece::BishopBlack, Piece::KnightBlack, Piece::RookBlack
+            },
+            PlayerSide::WHITE,
+            { true, true },
+            { true, true }
+        );
+        //initial.playerOnMove = PlayerSide::WHITE;
+        //initial.canCastleLeft.fill(true);
+        //initial.canCastleRight.fill(true);
+
+        //initial.pieceAt('a', '1') = Piece::RookWhite;
+        //initial.pieceAt('b', '1') = Piece::KnightWhite;
+        //initial.pieceAt('c', '1') = Piece::BishopWhite;
+        //initial.pieceAt('d', '1') = Piece::QueenWhite;
+        //initial.pieceAt('e', '1') = Piece::KingWhite;
+        //initial.pieceAt('f', '1') = Piece::BishopWhite;
+        //initial.pieceAt('g', '1') = Piece::KnightWhite;
+        //initial.pieceAt('h', '1') = Piece::RookWhite;
+
+        //initial.pieceAt('a', '2') = Piece::PawnWhite;
+        //initial.pieceAt('b', '2') = Piece::PawnWhite;
+        //initial.pieceAt('c', '2') = Piece::PawnWhite;
+        //initial.pieceAt('d', '2') = Piece::PawnWhite;
+        //initial.pieceAt('e', '2') = Piece::PawnWhite;
+        //initial.pieceAt('f', '2') = Piece::PawnWhite;
+        //initial.pieceAt('g', '2') = Piece::PawnWhite;
+        //initial.pieceAt('h', '2') = Piece::PawnWhite;
+
+        //initial.pieceAt('a', '8') = Piece::RookBlack;
+        //initial.pieceAt('b', '8') = Piece::KnightBlack;
+        //initial.pieceAt('c', '8') = Piece::BishopBlack;
+        //initial.pieceAt('d', '8') = Piece::QueenBlack;
+        //initial.pieceAt('e', '8') = Piece::KingBlack;
+        //initial.pieceAt('f', '8') = Piece::BishopBlack;
+        //initial.pieceAt('g', '8') = Piece::KnightBlack;
+        //initial.pieceAt('h', '8') = Piece::RookBlack;
+
+        //initial.pieceAt('a', '7') = Piece::PawnBlack;
+        //initial.pieceAt('b', '7') = Piece::PawnBlack;
+        //initial.pieceAt('c', '7') = Piece::PawnBlack;
+        //initial.pieceAt('d', '7') = Piece::PawnBlack;
+        //initial.pieceAt('e', '7') = Piece::PawnBlack;
+        //initial.pieceAt('f', '7') = Piece::PawnBlack;
+        //initial.pieceAt('g', '7') = Piece::PawnBlack;
+        //initial.pieceAt('h', '7') = Piece::PawnBlack;
+        //return initial;
     }
 };
 
@@ -2069,56 +2131,12 @@ void parseMoves(Board& board, std::string_view str)
 }
 
 
-Board startingPosition()
-{
-    Board initial;
-    initial.playerOnMove = PlayerSide::WHITE;
-    initial.canCastleLeft.fill(true);
-    initial.canCastleRight.fill(true);
-
-    initial.pieceAt('a', '1') = Piece::RookWhite;
-    initial.pieceAt('b', '1') = Piece::KnightWhite;
-    initial.pieceAt('c', '1') = Piece::BishopWhite;
-    initial.pieceAt('d', '1') = Piece::QueenWhite;
-    initial.pieceAt('e', '1') = Piece::KingWhite;
-    initial.pieceAt('f', '1') = Piece::BishopWhite;
-    initial.pieceAt('g', '1') = Piece::KnightWhite;
-    initial.pieceAt('h', '1') = Piece::RookWhite;
-
-    initial.pieceAt('a', '2') = Piece::PawnWhite;
-    initial.pieceAt('b', '2') = Piece::PawnWhite;
-    initial.pieceAt('c', '2') = Piece::PawnWhite;
-    initial.pieceAt('d', '2') = Piece::PawnWhite;
-    initial.pieceAt('e', '2') = Piece::PawnWhite;
-    initial.pieceAt('f', '2') = Piece::PawnWhite;
-    initial.pieceAt('g', '2') = Piece::PawnWhite;
-    initial.pieceAt('h', '2') = Piece::PawnWhite;
-
-    initial.pieceAt('a', '8') = Piece::RookBlack;
-    initial.pieceAt('b', '8') = Piece::KnightBlack;
-    initial.pieceAt('c', '8') = Piece::BishopBlack;
-    initial.pieceAt('d', '8') = Piece::QueenBlack;
-    initial.pieceAt('e', '8') = Piece::KingBlack;
-    initial.pieceAt('f', '8') = Piece::BishopBlack;
-    initial.pieceAt('g', '8') = Piece::KnightBlack;
-    initial.pieceAt('h', '8') = Piece::RookBlack;
-
-    initial.pieceAt('a', '7') = Piece::PawnBlack;
-    initial.pieceAt('b', '7') = Piece::PawnBlack;
-    initial.pieceAt('c', '7') = Piece::PawnBlack;
-    initial.pieceAt('d', '7') = Piece::PawnBlack;
-    initial.pieceAt('e', '7') = Piece::PawnBlack;
-    initial.pieceAt('f', '7') = Piece::PawnBlack;
-    initial.pieceAt('g', '7') = Piece::PawnBlack;
-    initial.pieceAt('h', '7') = Piece::PawnBlack;
-    return initial;
-}
 
 Board posFromString(std::string_view str)
 {
     if (getWord(str) == "startpos")
     {
-        Board res = startingPosition();
+        Board res = Board::startingPosition();
         parseMoves(res, str);
 
 #ifdef _DEBUG
@@ -2579,7 +2597,8 @@ int main(int argc, char** argv) {
             } break;
             case (4):
             {
-                Board test = startingPosition();
+                Board test = Board::startingPosition();
+                //constexpr auto tmp = test.piecesCount();
 
                 test.pieceAt('b', '1') = Piece::Nothing;
                 test.pieceAt('c', '1') = Piece::Nothing;
@@ -2591,6 +2610,13 @@ int main(int argc, char** argv) {
                 test.print();
 
                 benchmark(8, test);
+            } break;
+            case (5):
+            {
+                constexpr auto test = Board::startingPosition();
+                constexpr auto balance = test.balance();
+                constexpr auto counter = test.piecesCount();
+                constexpr auto min = test.countPiecesMin();
             } break;
 
             default:
