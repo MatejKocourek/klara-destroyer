@@ -2251,6 +2251,179 @@ Variation findBestInNumberOfMoves(Board& board, i8 moves)
     return res;
 }
 
+std::mutex uciGoM;
+bool ponder = false;//TODO finish pondering
+
+void uciGo(Board& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, i8 maxDepth)
+{
+    std::unique_lock l(uciGoM);
+    //uciGoM.lock();
+
+    duration_t timeTargetMax(timeTarget);
+    duration_t timeTargetOptimal(timeTarget);
+
+    if (timeTargetMax == duration_t(0))//We have to calculate our own time
+    {
+        float gamePhase = (17.0f - board.countPiecesMin()) / 16.0f;
+
+        const auto& myTime = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? wtime : btime;
+        const auto& myInc = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
+
+        timeTargetMax = duration_t((myInc + myTime * gamePhase) / 3);
+        timeTargetOptimal = timeTargetMax / 6;
+
+        if (ponder)
+        {
+            std::cerr << "We are pondering, enemy time is our time" << std::endl;
+            timeTargetMax += playerTime[(oppositeSide(board.playerOnMove) + 1) / 2];
+            timeTargetOptimal += playerTime[(oppositeSide(board.playerOnMove) + 1) / 2];
+        }
+    }
+
+
+    std::cerr << "Targeting " << timeTargetOptimal.count() << " ms." << std::endl;
+    std::cerr << "Highest I can go is " << timeTargetMax.count() << " ms." << std::endl;
+
+    criticalTimeDepleted = false;
+    optimalTimeDepleted = false;
+    std::mutex mTimeoutCritical;
+    std::mutex mTimeoutOptimal;
+    std::condition_variable cvTimeout;
+
+    std::thread criticalTimeout;
+    std::thread optimalTimeout;
+
+    if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
+    {
+        criticalTimeout = std::thread([&cvTimeout, &mTimeoutCritical, timeTargetMax]()
+            {
+                std::unique_lock<std::mutex> l(mTimeoutCritical);
+                if (cvTimeout.wait_for(l, timeTargetMax) == std::cv_status::timeout)
+                {
+                    criticalTimeDepleted = true;
+                    std::cerr << std::endl << std::endl << "Critical timeout! Terminating running computations ASAP" << std::endl << std::endl << std::endl;
+                }
+
+            });
+        //threadTimeout.detach();
+    }
+    if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
+    {
+        optimalTimeout = std::thread([&cvTimeout, &mTimeoutOptimal, timeTargetOptimal]()
+            {
+                std::unique_lock<std::mutex> l(mTimeoutOptimal);
+                if (cvTimeout.wait_for(l, timeTargetOptimal) == std::cv_status::timeout)
+                {
+                    optimalTimeDepleted = true;
+                    std::cerr << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
+                }
+
+            });
+        //threadTimeout.detach();
+    }
+
+
+    auto boardList = generateMoves(board,board.playerOnMove);
+
+    Variation bestPosFound;
+
+    std::vector<std::pair<double, float>> previousResults;
+
+    //std::cerr << "Depth: ";
+
+    for (i8 i = 4; i <= maxDepth; i += 2) {
+        out << "info " << "depth " << unsigned(i) << nl << std::flush;
+
+        size_t availableMoveCount = boardList.size();
+
+        uciGoM.unlock();//Allow interruption in the middle of calcuation
+        duration_t timeFirstVariation = findBestOnSameLevel(boardList, i);
+        uciGoM.lock();
+
+        bool searchedThroughAllMoves = boardList.size() == availableMoveCount;
+
+
+        bestPosFound = boardList.front();
+
+        auto elapsedTotal = duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
+
+        float scoreCp = bestPosFound.bestFoundValue;
+
+
+
+        //dynamicPositionRanking = false;
+
+        //res = bestPosFound;
+        std::cerr << "Elapsed for first variation: " << timeFirstVariation.count() << std::endl;
+        //std::cerr << i + 1 << ' ';
+
+        if (round(abs(scoreCp) / matePrice) > 0)
+        {
+            std::cerr << "Mate possibility, no need to search further" << std::endl;
+            break;
+        }
+
+        //std::cerr << " is " << elapsed << std::endl;
+
+        if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
+        {
+            std::cerr << "Emergency stop!" << std::endl;
+            break;
+        }
+
+        previousResults.emplace_back(timeFirstVariation.count(), bestPosFound.bestFoundValue);
+
+        if (previousResults.size() >= 2)
+        {
+            double logOlder = log2(previousResults[previousResults.size() - 2].first);
+            double logNewer = log2(previousResults[previousResults.size() - 1].first);
+            double growth = logNewer + logNewer - logOlder;
+
+            constexpr double branchingFactor = 1.0;
+            growth *= branchingFactor;
+
+            //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
+            //std::cerr << "log is " << growth << std::endl;
+            auto projectedNextTime = duration_t(pow(2, growth));
+            std::cerr << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
+
+            if (projectedNextTime > (timeTargetMax - elapsedTotal))//.
+            {
+                std::cerr << "We wouldn't get a result in required time" << std::endl;
+                break;
+            }
+
+            if (projectedNextTime <= (timeTargetOptimal - elapsedTotal))//
+            {
+                std::cerr << "We are easily gonna fit in the optimal time frame" << std::endl;
+                continue;
+            }
+
+            //Here we calculate if it makes sense to do more calculations.
+            //It makes sense to do more if the results are unstable
+
+            float diff = std::abs(previousResults[previousResults.size() - 1].second - previousResults[previousResults.size() - 2].second);
+
+            std::cerr << "Last two diff is " << diff << std::endl;
+
+            if (diff < 100)//The difference is too small, we probably wouldn't get much further info.
+            {
+                std::cerr << "We could start another depth, but it's probably not necessary." << std::endl;
+                break;
+            }
+            std::cerr << "This time, we are using some extra time to really think about this move." << std::endl;
+        }
+    }
+    out << "bestmove " << bestPosFound.firstMoveNotation.data() << nl << std::flush;
+
+    if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
+    {
+        cvTimeout.notify_all();//Cancel the timeout timer
+
+        criticalTimeout.join();
+        optimalTimeout.join();
+    }
+}
 
 
 int uci(std::istream& in)
@@ -2290,6 +2463,7 @@ int uci(std::istream& in)
         }
         else if (commandFirst == "isready")
         {
+            std::unique_lock l(uciGoM);
             board = Board();
             out << "readyok" << nl << std::flush;
         }
@@ -2300,10 +2474,12 @@ int uci(std::istream& in)
         }
         else if (commandFirst == "position")
         {
+            std::unique_lock l(uciGoM);
             board = posFromString(commandView);
         }
         else if (commandFirst == "setoption")
         {
+            std::unique_lock l(uciGoM);
             if (getWord(commandView) != "name")
                 continue;
             auto optionName = getWord(commandView);
@@ -2319,13 +2495,10 @@ int uci(std::istream& in)
         }
         else if (commandFirst == "go")
         {
-            timeGlobalStarted = std::chrono::high_resolution_clock::now();
-
-            std::array<duration_t, 2> playerTime;
+            std::array<duration_t, 2> playerTime = { duration_t(0), duration_t(0) };
             std::array<duration_t, 2> playerInc = { duration_t(0), duration_t(0) };
             //int64_t wtime = 0, btime = 0, winc = 0, binc = 0;
-            duration_t timeTargetMax(0);
-            duration_t timeTargetOptimal(0);
+            duration_t timeTarget(0);
             i8 maxDepth = std::numeric_limits<i8>::max();
 
             while (true)
@@ -2343,168 +2516,17 @@ int uci(std::istream& in)
                     playerInc[(PlayerSide::BLACK + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "movetime")
                 {
-                    timeTargetMax = std::chrono::milliseconds(atoll(getWord(commandView).data()));
-                    timeTargetOptimal = timeTargetMax;
+                    timeTarget = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 }
                 else if (word == "infinite")
                 {
-                    timeTargetMax = duration_t(std::numeric_limits<double>::infinity());
-                    timeTargetOptimal = timeTargetMax;
+                    timeTarget = duration_t(std::numeric_limits<double>::infinity());
                 }
                 else if (word == "depth")
                     maxDepth = atoll(getWord(commandView).data());
             }
             
-            if (timeTargetMax == duration_t(0))//We have to calculate our own time
-            {
-                float gamePhase = (17.0f - board.countPiecesMin()) / 16.0f;
-
-                const auto& myTime = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? wtime : btime;
-                const auto& myInc = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
-
-                timeTargetMax = duration_t((myInc + myTime * gamePhase) / 3);
-                timeTargetOptimal = timeTargetMax / 6;
-            }
-
-
-            std::cerr << "Targeting " << timeTargetOptimal.count() << " ms." << std::endl;
-            std::cerr << "Highest I can go is " << timeTargetMax.count() << " ms." << std::endl;
-
-            criticalTimeDepleted = false;
-            optimalTimeDepleted = false;
-            std::mutex mTimeoutCritical;
-            std::mutex mTimeoutOptimal;
-            std::condition_variable cvTimeout;
-
-            std::thread criticalTimeout;
-            std::thread optimalTimeout;
-
-            if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
-            {
-                criticalTimeout = std::thread([&cvTimeout, &mTimeoutCritical, timeTargetMax]()
-                    {
-                        std::unique_lock<std::mutex> l(mTimeoutCritical);
-                        if (cvTimeout.wait_for(l, timeTargetMax) == std::cv_status::timeout)
-                        {
-                            criticalTimeDepleted = true;
-                            std::cerr << std::endl << std::endl << "Critical timeout! Terminating running computations ASAP" << std::endl << std::endl << std::endl;
-                        }
-                            
-                    });
-                //threadTimeout.detach();
-            }
-            if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
-            {
-                optimalTimeout = std::thread([&cvTimeout, &mTimeoutOptimal, timeTargetOptimal]()
-                    {
-                        std::unique_lock<std::mutex> l(mTimeoutOptimal);
-                        if (cvTimeout.wait_for(l, timeTargetOptimal) == std::cv_status::timeout)
-                        {
-                            optimalTimeDepleted = true;
-                            std::cerr << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
-                        }
-
-                    });
-                //threadTimeout.detach();
-            }
-
-
-            auto boardList = generateMoves(board,board.playerOnMove);
-
-            Variation bestPosFound;
-
-            std::vector<std::pair<double, float>> previousResults;
-
-            //std::cerr << "Depth: ";
-
-            for (i8 i = 4; i <= maxDepth; i += 2) {
-                out << "info " << "depth " << unsigned(i) << nl << std::flush;
-
-                size_t availableMoveCount = boardList.size();
-                duration_t timeFirstVariation = findBestOnSameLevel(boardList, i);
-                bool searchedThroughAllMoves = boardList.size() == availableMoveCount;
-
-
-                bestPosFound = boardList.front();
-
-                auto elapsedTotal = duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
-
-                float scoreCp = bestPosFound.bestFoundValue;
-
-
-
-                //dynamicPositionRanking = false;
-
-                //res = bestPosFound;
-                std::cerr << "Elapsed for first variation: " << timeFirstVariation.count() << std::endl;
-                //std::cerr << i + 1 << ' ';
-
-                if (round(abs(scoreCp) / matePrice) > 0)
-                {
-                    std::cerr << "Mate possibility, no need to search further" << std::endl;
-                    break;
-                }
-                    
-                //std::cerr << " is " << elapsed << std::endl;
-
-                if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
-                {
-                    std::cerr << "Emergency stop!" << std::endl;
-                    break;
-                }
-                    
-                previousResults.emplace_back(timeFirstVariation.count(), bestPosFound.bestFoundValue);
-
-                if (previousResults.size() >= 2)
-                {
-                    double logOlder = log2(previousResults[previousResults.size() - 2].first);
-                    double logNewer = log2(previousResults[previousResults.size() - 1].first);
-                    double growth = logNewer + logNewer - logOlder;
-
-                    constexpr double branchingFactor = 1.0;
-                    growth *= branchingFactor;
-
-                    //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
-                    //std::cerr << "log is " << growth << std::endl;
-                    auto projectedNextTime = duration_t(pow(2, growth));
-                    std::cerr << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
-
-                    if (projectedNextTime > (timeTargetMax - elapsedTotal))//.
-                    {
-                        std::cerr << "We wouldn't get a result in required time" << std::endl;
-                        break;
-                    }
-
-                    if (projectedNextTime <= (timeTargetOptimal - elapsedTotal))//
-                    {
-                        std::cerr << "We are easily gonna fit in the optimal time frame" << std::endl;
-                        continue;
-                    }
-
-                    //Here we calculate if it makes sense to do more calculations.
-                    //It makes sense to do more if the results are unstable
-
-                    float diff = std::abs(previousResults[previousResults.size() - 1].second - previousResults[previousResults.size() - 2].second);
-
-                    std::cerr << "Last two diff is " << diff << std::endl;
-
-                    if (diff < 100)//The difference is too small, we probably wouldn't get much further info.
-                    {
-                        std::cerr << "We could start another depth, but it's probably not necessary." << std::endl;
-                        break;
-                    }
-                    std::cerr << "This time, we are using some extra time to really think about this move." << std::endl;
-                }
-            }
-            out << "bestmove " << bestPosFound.firstMoveNotation.data() << nl << std::flush;
-
-            if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
-            {
-                cvTimeout.notify_all();//Cancel the timeout timer
-
-                criticalTimeout.join();
-                optimalTimeout.join();
-            }
+            uciGo(board, playerTime, playerInc, timeTarget, maxDepth);
 
         }
         else
