@@ -1748,21 +1748,21 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
 
         evaluateGameMoveFromQ(localPos, depthW);
 
-        if (criticalTimeDepleted) [[unlikely]]
-            --qPos;
+        //if (criticalTimeDepleted) [[unlikely]]
+        //    --qPos;
     }
 }
 
 void cutoffBadMoves(std::vector<Variation>& boards)
 {
-    float bestMoveScore = boards.front().bestFoundValue;
+    float bestMoveScore = abs(boards.front().bestFoundValue);
 
     float cutoffPoint = bestMoveScore + 50;
 
     size_t i = 1;
     for (i < boards.size(); ++i;)
     {
-        if (boards[i].bestFoundValue > cutoffPoint)
+        if (abs(boards[i].bestFoundValue) > cutoffPoint)
             break;
     }
 
@@ -1854,10 +1854,10 @@ duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, Play
         std::cerr << "Not enough time to search all moves. Only managed to fully go through " << qPos << " out of " << boards.size() << std::endl;
     }
 
-    boards.resize(qPos);
-
-    if (boards.empty())//Not a single board came through
+    if (criticalTimeDepleted && qPos == threadCount)//Not a single board came through
         return duration_t(0);
+
+    boards.resize(qPos);
 
     auto timeFirstBoard = boards.front().time;
 
