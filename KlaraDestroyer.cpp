@@ -1774,15 +1774,15 @@ void cutoffBadMoves(std::vector<Variation>& boards)
 
 
 
-void printMoveInfo(unsigned depth, const std::chrono::duration<float, std::milli>& elapsedTotal, const std::chrono::duration<float, std::milli> &elapsedDepth, const size_t& nodesDepth, const Variation& move, size_t moveRank, bool upperbound, PlayerSide pov)
+void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duration_t& elapsedDepth, const size_t& nodesDepth, const Variation& move, size_t moveRank, bool upperbound, PlayerSide pov)
 {
-    //auto elapsedTotal = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
+    const auto secondsPassed = std::chrono::duration_cast<std::chrono::duration<double>>(elapsedDepth);
     out
         << "info "
         << "depth " << unsigned(depth) << ' '
         << "time "  << (size_t)round(elapsedTotal.count()) << ' '
         << "nodes " << totalNodesAll << ' '
-        << "nps " << (size_t)round((nodesDepth / elapsedDepth.count())*1000)<< ' '
+        << "nps " << (size_t)round(nodesDepth / secondsPassed.count())<< ' '
         ;
     printScore(out, move.bestFoundValue, depth, pov) << ' ';
     if (upperbound)
@@ -1807,7 +1807,7 @@ duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, Play
 #ifdef _DEBUG
     const size_t threadCount = 1;
 #else
-    const size_t threadCount = std::thread::hardware_concurrency() / 2;
+    const size_t threadCount = std::thread::hardware_concurrency();// / 2;
 #endif
 
     auto timeThisStarted = std::chrono::high_resolution_clock::now();
@@ -1873,8 +1873,8 @@ duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, Play
         std::unreachable();
     }
 
-    auto elapsedThis = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeThisStarted);
-    auto elapsedTotal = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
+    duration_t elapsedThis = std::chrono::high_resolution_clock::now() - timeThisStarted;
+    duration_t elapsedTotal = std::chrono::high_resolution_clock::now() - timeGlobalStarted;
 
 
     //float scoreCp = boards.front().bestFoundValue;
@@ -1988,7 +1988,7 @@ std::vector<Variation> generateMoves(Board& board, PlayerSide bestForWhichSide)/
         std::unreachable();
     }
 
-    auto elapsedTotal = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
+    duration_t elapsedTotal = std::chrono::high_resolution_clock::now() - timeGlobalStarted;
 
     for (size_t i = res.size()-1;i!=(size_t)(-1); --i)
         printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[i], i + 1, false, bestForWhichSide);
@@ -2257,6 +2257,7 @@ bool ponder = false;//TODO finish pondering
 void uciGo(Board& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, i8 maxDepth)
 {
     std::unique_lock l(uciGoM);
+    timeGlobalStarted = std::chrono::high_resolution_clock::now();
     //uciGoM.lock();
 
     duration_t timeTargetMax(timeTarget);
