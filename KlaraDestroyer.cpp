@@ -87,9 +87,11 @@ typedef std::chrono::duration<double, std::milli> duration_t;
 
 class Board;
 
-static constexpr float kingPrice = 20000;
+//static constexpr float kingPrice = 20000;
 static constexpr float matePrice = 10000000;
-static constexpr float stalePrice = 50000;
+//static constexpr float stalePrice = 50000;
+
+static constexpr size_t maxMoves = 218;
 
 #define MOVE_PIECE_FREE_ONLY std::equal_to<float>()
 #define MOVE_PIECE_CAPTURE_ONLY std::greater<float>()
@@ -156,7 +158,9 @@ inline void update_min(std::atomic<T>& atom, const T val)
 
 
 struct Options {
-    size_t MultiPV = 1;
+    size_t MultiPV;
+    size_t Threads;
+    size_t Verbosity;
 } options;
 
 constexpr inline PlayerSide oppositeSide(PlayerSide side) noexcept
@@ -231,7 +235,6 @@ constexpr wchar_t symbolW(Piece p)
     default:
         std::unreachable();
     }
-    std::unreachable();
 }
 
 constexpr char symbolA(Piece p)
@@ -267,8 +270,53 @@ constexpr char symbolA(Piece p)
     default:
         std::unreachable();
     }
-    std::unreachable();
 }
+constexpr char symbolA(PieceGeneric p)
+{
+    switch (p)
+    {
+    case NothingGeneric:
+        return ' ';
+    case Pawn:
+        return 'p';
+    case Knight:
+        return 'n';
+    case Bishop:
+        return 'b';
+    case Rook:
+        return 'r';
+    case Queen:
+        return 'q';
+    case King:
+        return 'k';
+    default:
+        std::unreachable();
+    }
+}
+
+constexpr PieceGeneric fromGenericSymbol(char a)
+{
+    switch (a)
+    {
+    case ' ':
+        return PieceGeneric::NothingGeneric;
+    case 'p':
+        return PieceGeneric::Pawn;
+    case 'n':
+        return PieceGeneric::Knight;
+    case 'b':
+        return PieceGeneric::Bishop;
+    case 'r':
+        return PieceGeneric::Rook;
+    case 'q':
+        return PieceGeneric::Queen;
+    case 'k':
+        return PieceGeneric::King;
+    default:
+        AssertAssume(false);
+    }
+}
+
 constexpr PlayerSide pieceColor(Piece p)
 {
     return static_cast<PlayerSide>(((static_cast<int8_t>(p) & static_cast <int8_t>(0x80)) >> 6) | 0x01);
@@ -278,6 +326,12 @@ constexpr PieceGeneric toGenericPiece(Piece p)
     return (PieceGeneric)((p >= 0) ? p : -p);
     //return static_cast<PieceGeneric>(std::abs(p));
 }
+constexpr Piece fromGenericPiece(PieceGeneric p, PlayerSide side)
+{
+    return (Piece)(p*side);
+}
+
+
 constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
 {
     //AssertAssume(column < 8 && row < 8 && column >= 0 && row >= 0);
@@ -407,7 +461,7 @@ constexpr float pricePiece(PieceGeneric p)
     case Queen:
         return 1025;
     case King:
-        return kingPrice;
+        return 20000;
     default:
         std::unreachable();
     }
@@ -604,7 +658,8 @@ public:
         auto& to = pieceAt(columnTo, rowTo);
 
         if (from == Piece::Nothing)
-            throw std::exception("Trying to move an empty field");
+            std::cerr << "ERROR! Moving an empty field!" << std::endl;
+            //throw std::exception("Trying to move an empty field");
 
         to = from;
         from = Piece::Nothing;
@@ -688,7 +743,7 @@ public:
                     res[4] = tolower(symbolA(pieces[i]));
                 }
 
-                if (pricePiece(pieces[i]) == kingPrice)//castling hack
+                if (toGenericPiece(pieces[i]) == PieceGeneric::King)//castling hack
                     break;
             }
         }
@@ -866,7 +921,7 @@ struct Variation {
             {
                 auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), 1, alpha, beta, 0);
 
-                if (foundVal * onMove == kingPrice) [[unlikely]]//Je možné vzít krále, hra skončila
+                if (foundVal * onMove == pricePiece(PieceGeneric::King)) [[unlikely]]//Je možné vzít krále, hra skončila
                     {
                         return true;
                     }
@@ -1070,7 +1125,7 @@ struct Variation {
                             if (foundVal * board.playerOnMove > bestValue * board.playerOnMove) {
                                 bestValue = foundVal;
                             }
-                        if (foundVal * board.playerOnMove == kingPrice)//Je možné vzít krále, hra skončila
+                        if (foundVal * board.playerOnMove == pricePiece(PieceGeneric::King))//Je možné vzít krále, hra skončila
                         {
                             //wcout << endl;
                             //print();
@@ -1179,10 +1234,10 @@ struct Variation {
         //if (doNotContinue) [[unlikely]]
         //    return;
 
-        if (priceTaken >= kingPrice - 128) [[unlikely]]//Je možné vzít krále
+        if (priceTaken >= pricePiece(PieceGeneric::King) - 128) [[unlikely]]//Je možné vzít krále
         {
             doNotContinue = true;
-            bestValue = kingPrice * board.playerOnMove;
+            bestValue = pricePiece(PieceGeneric::King) * board.playerOnMove;
             //totalMoves++;
             //return;
         }
@@ -1200,7 +1255,7 @@ struct Variation {
             {
                 foundVal = tryPiece(column, row, p, depth, alpha, beta, valueSoFar);
 
-                if ((foundVal * board.playerOnMove * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
+                if ((foundVal * board.playerOnMove * (-1)) == pricePiece(PieceGeneric::King))//V dalším tahu bych přišel o krále, není to legitimní tah
                     return;
             }
             else//leaf node of the search tree
@@ -1680,12 +1735,11 @@ void evaluateGameMove(Variation& board, i8 depth)//, double alpha = -std::numeri
     auto timeStart = std::chrono::high_resolution_clock::now();
     Variation localBoard(board);
 
-    if (options.MultiPV > 1) [[unlikely]]//If we want to know multiple good moves, we cannot prune using a/B at root level
+    if (options.MultiPV > 1)//If we want to know multiple good moves, we cannot prune using a/B at root level
     {
         board.bestFoundValue = localBoard.bestMoveScore(depth, board.startingValue, -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
         //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
     }
-
     else
     {
         switch (localBoard.board.playerOnMove)
@@ -1704,7 +1758,8 @@ void evaluateGameMove(Variation& board, i8 depth)//, double alpha = -std::numeri
             std::unreachable();
         }
         //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
-        printLowerBound();
+        if(options.Verbosity >= 4)
+            printLowerBound();
     }
 
     board.nodes = localBoard.nodes;
@@ -1713,19 +1768,22 @@ void evaluateGameMove(Variation& board, i8 depth)//, double alpha = -std::numeri
 }
 
 
-static std::vector<Variation*> q;
+static static_vector<Variation*, maxMoves> q;
 static std::atomic<size_t> qPos;
 
 void evaluateGameMoveFromQ(size_t posInQ, i8 depth)
 {
     auto& board = *q[posInQ];
-    std::osyncstream(out)
-        << "info "
-        << "currmove "
-        << board.firstMoveNotation.data() << ' '
-        << "currmovenumber "
-        << (posInQ + 1)
-        << nl << std::flush;
+    if (options.Verbosity >= 3)[[likely]]
+    {
+        std::osyncstream(out)
+            << "info "
+            << "currmove "
+            << board.firstMoveNotation.data() << ' '
+            << "currmovenumber "
+            << (posInQ + 1)
+            << nl << std::flush;
+    }
     evaluateGameMove(board, depthW);
 }
 
@@ -1753,7 +1811,7 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
     }
 }
 
-void cutoffBadMoves(std::vector<Variation>& boards)
+void cutoffBadMoves(static_vector<Variation,maxMoves>& boards)
 {
     float bestMoveScore = abs(boards.front().bestFoundValue);
 
@@ -1793,7 +1851,7 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
         << nl;
 }
 
-duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, PlayerSide onMove)
+duration_t findBestOnSameLevel(static_vector<Variation,maxMoves>& boards, i8 depth)//, PlayerSide onMove)
 {
     AssertAssume(!boards.empty());
     PlayerSide onMoveResearched = boards.front().board.playerOnMove;
@@ -1803,12 +1861,6 @@ duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, Play
     //Check if all boards are from the same POV. Required for the a/B to work.
     for (const auto& i : boards)
         assert(i.board.playerOnMove == onMoveResearched);
-
-#ifdef _DEBUG
-    const size_t threadCount = 1;
-#else
-    const size_t threadCount = std::thread::hardware_concurrency();// / 2;
-#endif
 
     auto timeThisStarted = std::chrono::high_resolution_clock::now();
     if (depth > 0)
@@ -1831,9 +1883,9 @@ duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, Play
         //    evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
         
 
-        std::vector<std::thread> threads;
-        threads.reserve(threadCount - 1);
-        for (size_t i = 1; i < threadCount; ++i)
+        static_vector<std::thread,256> threads;
+        threads.reserve(options.Threads - 1);
+        for (size_t i = 1; i < options.Threads; ++i)
             threads.emplace_back(workerFromQ,i);
 
         workerFromQ(0);//Do some work on this thread
@@ -1854,7 +1906,7 @@ duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, Play
         std::cerr << "Not enough time to search all moves. Only managed to fully go through " << qPos << " out of " << boards.size() << std::endl;
     }
 
-    if (criticalTimeDepleted && qPos == threadCount)//Not a single board came through
+    if ((optimalTimeDepleted || criticalTimeDepleted) && (qPos <= options.Threads))//Not a single board came through
         return duration_t(0);
 
     boards.resize(qPos);
@@ -1883,29 +1935,21 @@ duration_t findBestOnSameLevel(std::vector<Variation>& boards, i8 depth)//, Play
     //if (criticalTimeDepleted)
     //    return;
 
+    if (options.Verbosity >= 6 || options.MultiPV > 1)
+    {
+        for (size_t i = boards.size() - 1; i != 0; --i)
+            printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, options.MultiPV == 1, oppositeSide(onMoveW));
+    }
 
-    for (size_t i = boards.size()-1; i != 0; --i)
-        printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, options.MultiPV == 1, oppositeSide(onMoveW));
-
-    printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards.front(), 1, false, oppositeSide(onMoveW));
+    //if (options.Verbosity >= 2)
+        printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards.front(), 1, false, oppositeSide(onMoveW));
 
     std::cout << std::flush;
 
     return timeFirstBoard;
 }
 
-
-void timeLimit(int milliseconds, bool * doNotStop)
-{
-    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
-    if (!*doNotStop)
-        criticalTimeDepleted = true;
-    delete doNotStop;
-    
-}
-
-
-std::vector<Variation> generateMoves(Board& board, PlayerSide bestForWhichSide)//, i8 depth = 1
+static_vector<Variation,maxMoves> generateMoves(Board& board, PlayerSide bestForWhichSide)//, i8 depth = 1
 {
     static auto rd = std::random_device{};
     static auto rng = std::default_random_engine{ rd() };
@@ -1918,7 +1962,8 @@ std::vector<Variation> generateMoves(Board& board, PlayerSide bestForWhichSide)/
     totalNodesAll = 0;
     //saveToVector = true;
 
-    out << "info depth 1" << nl << std::flush;
+    if (options.Verbosity >= 2)
+        out << "info depth 1" << nl << std::flush;
     //transpositions.clear();
     Variation tmp(board, 0, 0, 1, board.playerOnMove, std::array<char,6>{ '\0' });
     tmp.saveToVector = true;
@@ -1926,7 +1971,7 @@ std::vector<Variation> generateMoves(Board& board, PlayerSide bestForWhichSide)/
     //totalNodesDepth = tmp.nodes;
     totalNodesAll = tmp.nodes;
     //transpositions.clear();
-    std::vector<Variation> res;// = std::move(firstPositions);
+    static_vector<Variation,maxMoves> res;// = std::move(firstPositions);
     res.reserve(tmp.firstPositions.size());
 
     //Add move names
@@ -1990,8 +2035,15 @@ std::vector<Variation> generateMoves(Board& board, PlayerSide bestForWhichSide)/
 
     duration_t elapsedTotal = std::chrono::high_resolution_clock::now() - timeGlobalStarted;
 
-    for (size_t i = res.size()-1;i!=(size_t)(-1); --i)
-        printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[i], i + 1, false, bestForWhichSide);
+    if (options.Verbosity >= 5)
+    {
+        for (size_t i = res.size() - 1; i != 0; --i)
+            printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[i], i + 1, false, bestForWhichSide);
+    }
+    if (options.Verbosity >= 2)
+    {
+        printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[0], 1, false, bestForWhichSide);
+    }
 
     std::cout << std::flush;
 
@@ -2032,7 +2084,7 @@ void executeMove(Board& board, std::string_view& str)
     board.movePiece(move[0], move[1], move[2], move[3]);
 
     //Castling
-    if (move == "e1c1" && board.pieceAt(move[2], move[3]) == Piece::KingWhite)
+    if      (move == "e1c1" && board.pieceAt(move[2], move[3]) == Piece::KingWhite)
         board.movePiece('a', '1', 'd', '1');
     else if (move == "e1g1" && board.pieceAt(move[2], move[3]) == Piece::KingWhite)
         board.movePiece('h', '1', 'f', '1');
@@ -2044,23 +2096,8 @@ void executeMove(Board& board, std::string_view& str)
     //Pawn promotion
     else if (move.size() == 5)
     {
-        Piece evolvedInto = Piece::Nothing;
-        if (move[3] == '8' && move[4] == 'q')
-            evolvedInto = Piece::QueenWhite;
-        else if (move[3] == '1' && move[4] == 'q')
-            evolvedInto = Piece::QueenBlack;
-        else if (move[3] == '8' && move[4] == 'r')
-            evolvedInto = Piece::RookWhite;
-        else if (move[3] == '1' && move[4] == 'r')
-            evolvedInto = Piece::RookBlack;
-        else if (move[3] == '8' && move[4] == 'b')
-            evolvedInto = Piece::BishopWhite;
-        else if (move[3] == '1' && move[4] == 'b')
-            evolvedInto = Piece::BishopBlack;
-        else if (move[3] == '8' && move[4] == 'k')
-            evolvedInto = Piece::KnightWhite;
-        else if (move[3] == '1' && move[4] == 'k')
-            evolvedInto = Piece::KnightBlack;
+        char promotionChar = tolower(move[4]);
+        Piece evolvedInto = fromGenericPiece(fromGenericSymbol(promotionChar), board.playerOnMove);
         board.pieceAt(move[2], move[3]) = evolvedInto;
     }
 
@@ -2146,7 +2183,7 @@ void parseMoves(Board& board, std::string_view str)
 
 Board posFromString(std::string_view str)
 {
-    if (getWord(str) == "startpos")
+    if (getWord(str) == "startpos") [[likely]]
     {
         Board res = Board::startingPosition();
         parseMoves(res, str);
@@ -2160,68 +2197,11 @@ Board posFromString(std::string_view str)
 
 }
 
-
-Variation findBestInTimeLimit(Board& board, int milliseconds, bool endSooner = true)
-{
-    //dynamicPositionRanking = false;
-    timeGlobalStarted = std::chrono::high_resolution_clock::now();
-
-    bool* tellThemToStop = new bool;
-    *tellThemToStop = false;
-
-    auto limit = std::thread(timeLimit, milliseconds,tellThemToStop);
-    //auto start = chrono::high_resolution_clock::now();
-
-    auto boardList = generateMoves(board,board.playerOnMove);
-    //for (size_t i = 0; i < boardList.size(); i++)
-    //{
-    //    wcout << boardList[i].pieceTakenValue << endl;
-    //    boardList[i].researchedBoard.print();
-    //}
-
-    Variation res;
-    //dynamicPositionRanking = true;
-
-    std::wcout << "Depth: ";
-    for (i8 i = 4; i < 100; i += 2) {
-        auto bestPosFound = findBestOnSameLevel(boardList, i);//, oppositeSide(researchedBoard.playerOnMove));
-        //dynamicPositionRanking = false;
-        if (criticalTimeDepleted)
-        {
-            limit.join();
-            break;
-        }
-
-        res = boardList.front();
-        std::wcout << i << ' ';
-
-        if (endSooner)
-        {
-            double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - timeGlobalStarted).count();
-            double remaining = milliseconds - elapsed;
-
-            if (remaining/4.0  < elapsed)
-            {
-                std::wcout << std::endl << "Would not likely finish next stage, optimizing out " << remaining / 1000 << "s.";
-                criticalTimeDepleted = true;
-                *tellThemToStop = true;
-                limit.detach();//prasarna
-                break;
-            }
-        }
-
-        
-    }
-    std::wcout << std::endl;
-
-    return res;
-}
-
 Variation findBestInNumberOfMoves(Board& board, i8 moves)
 {
     timeGlobalStarted = std::chrono::high_resolution_clock::now();
     //dynamicPositionRanking = false;
-    auto boardList = generateMoves(board,board.playerOnMove);
+    auto boardList = generateMoves(board, board.playerOnMove);
 
     //for (const auto& i : boardList)
     //{
@@ -2270,8 +2250,8 @@ void uciGo(Board& board, std::array<duration_t, 2> playerTime, std::array<durati
         const auto& myTime = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? wtime : btime;
         const auto& myInc = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
 
-        timeTargetMax = duration_t((myInc + myTime * gamePhase) / 3);
-        timeTargetOptimal = timeTargetMax / 6;
+        timeTargetMax = duration_t((myInc + myTime * gamePhase) / 4);
+        timeTargetOptimal = timeTargetMax / 8;
 
         if (ponder)
         {
@@ -2328,12 +2308,13 @@ void uciGo(Board& board, std::array<duration_t, 2> playerTime, std::array<durati
 
     Variation bestPosFound;
 
-    std::vector<std::pair<double, float>> previousResults;
+    std::vector<std::pair<duration_t, Variation>> previousResults;
 
     //std::cerr << "Depth: ";
 
     for (i8 i = 4; i <= maxDepth; i += 2) {
-        out << "info " << "depth " << unsigned(i) << nl << std::flush;
+        if(options.Verbosity >= 2)
+            out << "info " << "depth " << unsigned(i) << nl << std::flush;
 
         size_t availableMoveCount = boardList.size();
 
@@ -2372,12 +2353,12 @@ void uciGo(Board& board, std::array<duration_t, 2> playerTime, std::array<durati
             break;
         }
 
-        previousResults.emplace_back(timeFirstVariation.count(), bestPosFound.bestFoundValue);
+        previousResults.emplace_back(timeFirstVariation.count(), bestPosFound);
 
         if (previousResults.size() >= 2)
         {
-            double logOlder = log2(previousResults[previousResults.size() - 2].first);
-            double logNewer = log2(previousResults[previousResults.size() - 1].first);
+            double logOlder = log2(previousResults[previousResults.size() - 2].first.count());
+            double logNewer = log2(previousResults[previousResults.size() - 1].first.count());
             double growth = logNewer + logNewer - logOlder;
 
             constexpr double branchingFactor = 1.0;
@@ -2403,11 +2384,13 @@ void uciGo(Board& board, std::array<duration_t, 2> playerTime, std::array<durati
             //Here we calculate if it makes sense to do more calculations.
             //It makes sense to do more if the results are unstable
 
-            float diff = std::abs(previousResults[previousResults.size() - 1].second - previousResults[previousResults.size() - 2].second);
+            bool foundSameBestMove = previousResults[previousResults.size() - 1].second.firstMoveNotation == previousResults[previousResults.size() - 2].second.firstMoveNotation;
 
-            std::cerr << "Last two diff is " << diff << std::endl;
+            //float diff = std::abs(previousResults[previousResults.size() - 1].second - previousResults[previousResults.size() - 2].second);
 
-            if (diff < 100)//The difference is too small, we probably wouldn't get much further info.
+            //std::cerr << "Last two diff is " << diff << std::endl;
+
+            if(foundSameBestMove)//if (diff < 100)//The difference is too small, we probably wouldn't get much further info.
             {
                 std::cerr << "We could start another depth, but it's probably not necessary." << std::endl;
                 break;
@@ -2444,28 +2427,43 @@ int uci(std::istream& in)
         std::string command;
         std::getline(in, command);
         
-        if (!in.good())
+        if (!in.good()) [[unlikely]]
         {
             std::cerr << "End of input stream, rude! End the uci session with 'quit' in a controlled way." << std::endl;
             return -1;
         }
             
-
-
         std::string_view commandView(command);
         auto commandFirst = getWord(commandView);
+
         if (commandFirst == "uci")
         {
+            {
+                //board = Board();
+                options.MultiPV = 1;
+#ifdef _DEBUG
+                options.Threads = 1;
+                options.Verbosity = 7;
+#else
+                options.Threads = std::max(std::thread::hardware_concurrency() / 2, 1u);
+                options.Verbosity = 3;
+#endif
+            }
             out << "id name Klara Destroyer" << nl
                 << "id author Matej Kocourek" << nl
-                << "option name MultiPV type spin min 1 default " << options.MultiPV << nl
+                << "option name MultiPV type spin min 1 max 218 default " << options.MultiPV << nl
+                << "option name Threads type spin min 1 max 256 default " << options.Threads << nl
+                << "option name Verbosity type spin min 0 max 7 default " << options.Verbosity << nl
                 << "uciok" << nl
                 << std::flush;
+        }
+        else if (commandFirst == "ucinewgame")
+        {
+            board = Board();
         }
         else if (commandFirst == "isready")
         {
             std::unique_lock l(uciGoM);
-            board = Board();
             out << "readyok" << nl << std::flush;
         }
         else if (commandFirst == "quit")
@@ -2492,6 +2490,22 @@ int uci(std::istream& in)
                 //std::cerr << "Option value was: " << optionValue << std::endl;
                 options.MultiPV = std::atoll(optionValue.data());
                 std::cerr << "Setting MultiPV to " << options.MultiPV << std::endl;
+            }
+            else if (optionName == "Threads")
+            {
+                //std::cerr << "Option value was: " << optionValue << std::endl;
+                options.Threads = std::atoll(optionValue.data());
+                std::cerr << "Setting Threads to " << options.Threads << std::endl;
+            }
+            else if (optionName == "Verbosity")
+            {
+                //std::cerr << "Option value was: " << optionValue << std::endl;
+                options.Verbosity = std::atoll(optionValue.data());
+                std::cerr << "Setting Verbosity to " << options.Verbosity << std::endl;
+            }
+            else
+            {
+                std::cerr << "This option is not recognized. Skipping." << std::endl;
             }
         }
         else if (commandFirst == "go")
@@ -2528,7 +2542,6 @@ int uci(std::istream& in)
             }
             
             uciGo(board, playerTime, playerInc, timeTarget, maxDepth);
-
         }
         else
         {

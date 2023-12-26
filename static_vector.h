@@ -226,6 +226,23 @@ public:
 		_size = 0;
 	}
 
+	void resize(size_t count)
+	{
+		while (_size > count)
+			std::destroy_at(&data()[_size--]);
+
+		while (_size < count)
+			emplace_back();
+	}
+	void resize(size_t count, const T& value)
+	{
+		while (_size > count)
+			std::destroy_at(&data()[_size--]);
+
+		while (_size < count)
+			push_back(value);
+	}
+
 
 	struct Iterator
 	{
