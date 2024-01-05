@@ -229,7 +229,7 @@ public:
 	void resize(size_t count)
 	{
 		while (_size > count)
-			std::destroy_at(&data()[_size--]);
+			std::destroy_at(&data()[--_size]);
 
 		while (_size < count)
 			emplace_back();
