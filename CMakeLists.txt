@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 23)
 project ("KlaraDestroyer")
 
 # Přidejte zdrojový kód ke spustitelnému souboru tohoto projektu.
-add_executable (KlaraDestroyer "KlaraDestroyer.cpp" "static_vector.h")
+add_executable (KlaraDestroyer "KlaraDestroyer.h" "static_vector.h" "main.cpp")
 
 set_target_properties(KlaraDestroyer PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/GL>;$<$<CONFIG:Release>:/arch:AVX2>;$<$<CONFIG:Release>:/fp:fast>")
 set_target_properties(KlaraDestroyer PROPERTIES LINK_FLAGS_RELEASE "/LTCG")

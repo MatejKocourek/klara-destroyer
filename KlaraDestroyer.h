@@ -1,26 +1,4 @@
-﻿#ifndef MS_STDLIB_BUGS // Allow overriding the autodetection.
-/* The Microsoft C and C++ runtime libraries that ship with Visual Studio, as
- * of 2017, have a bug that neither stdio, iostreams or wide iostreams can
- * handle Unicode input or output.  Windows needs some non-standard magic to
- * work around that.  This includes programs compiled with MinGW and Clang
- * for the win32 and win64 targets.
- */
-#  if ( _MSC_VER || __MINGW32__ || __MSVCRT__ )
- /* This code is being compiled either on MS Visual C++, or MinGW, or
-  * clang++ in compatibility mode for either, or is being linked to the
-  * msvcrt.dll runtime.
-  */
-#    define MS_STDLIB_BUGS 1
-#  else
-#    define MS_STDLIB_BUGS 0
-#  endif
-#endif
-
-#if MS_STDLIB_BUGS
-#  include <io.h>
-#  include <fcntl.h>
-#endif
-#include "static_vector.h"
+﻿
 #include <array>
 #include <string>
 #include <syncstream>
@@ -39,13 +17,21 @@
 #include <functional>
 #include <sstream>
 #include <iomanip>
+#include <iostream>
+#include <sstream>
+#include "static_vector.h"
+
+//std::cout
+
+
 
 namespace KlaraDestroyer {
-
-
-
-#define out std::cout
+std::ostream* outStream;
+#define out (*outStream)
 #define nl '\n'
+
+#define debugOut std::cerr
+//#ifdef _DEBUG std::cerr #else (void) #endif
 
 #ifdef _DEBUG
 #define AssertAssume(...)  assert(__VA_ARGS__)
@@ -56,27 +42,8 @@ namespace KlaraDestroyer {
 
 
 //#define CASTLING_DISABLED
+#define RELAX_CASTLING_PREDICTIONS
 
-void init_locale(void)
-// Does magic so that wcout can work.
-{
-#if MS_STDLIB_BUGS
-    // Windows needs a little non-standard magic.
-    constexpr char cp_utf16le[] = ".1200"; // UTF-16 little-endian locale.
-    setlocale(LC_ALL, cp_utf16le);
-    _setmode(_fileno(stdout), _O_WTEXT);
-
-    /* Repeat for _fileno(stdin), if needed. */
-#else
-    // The correct locale name may vary by OS, e.g., "en_US.utf8".
-    constexpr char locale_name[] = "";
-    setlocale(LC_ALL, locale_name);
-    std::locale::global(std::locale(locale_name));
-    std::wcin.imbue(std::locale())
-        std::wcout.imbue(std::locale());
-
-#endif
-}
 
 typedef int_fast8_t i8;
 typedef uint_fast8_t u8;
@@ -136,10 +103,10 @@ enum Piece : i8
     KingBlack = -6,//0x86
 };
 
-static bool criticalTimeDepleted;
-static bool optimalTimeDepleted;
+static std::atomic<bool> criticalTimeDepleted;
+static std::atomic<bool> optimalTimeDepleted;
 static constexpr bool dynamicPositionRanking = false;//Not needed, static ranking is faster and should be enough
-static i8 depthW;
+//static i8 depthW;
 static PlayerSide onMoveW;
 static bool deterministic;
 static std::chrono::steady_clock::time_point timeGlobalStarted;
@@ -149,15 +116,15 @@ static constexpr i8 depthToStopOrderingPieces = 3;
 static constexpr i8 depthToStopOrderingMoves = 3;
 
 template<typename T>
-inline void update_max(std::atomic<T>& atom, const T val)
+inline void update_max(std::atomic<T>& atom, const T& val)
 {
-    for (T atom_val = atom; atom_val < val && atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
+    for (T atom_val = atom; atom_val < val && !atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
 }
 
 template<typename T>
-inline void update_min(std::atomic<T>& atom, const T val)
+inline void update_min(std::atomic<T>& atom, const T& val)
 {
-    for (T atom_val = atom; atom_val > val && atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
+    for (T atom_val = atom; atom_val > val && !atom.compare_exchange_weak(atom_val, val););//std::memory_order_relaxed
 }
 
 
@@ -662,7 +629,7 @@ public:
         auto& to = pieceAt(columnTo, rowTo);
 
         if (from == Piece::Nothing)
-            std::cerr << "ERROR! Moving an empty field!" << std::endl;
+            debugOut << "ERROR! Moving an empty field!" << std::endl;
             //throw std::exception("Trying to move an empty field");
 
         to = from;
@@ -968,7 +935,7 @@ struct Variation {
     //        if (found->pieceColor() == attacker)
     //        {
     //            auto foundVal = found->bestMoveWithThisPieceScore(*this, (i % 8), (i / 8), 1, alpha, beta, valueSoFar);
-    //            std::cerr << foundVal << std::endl;
+    //            debugOut << foundVal << std::endl;
     //            if (foundVal * attacker == baitWhite.pricePiece())//Bait taken
     //            {
     //                pieceAt(column, row) = backup;
@@ -1014,7 +981,7 @@ struct Variation {
         if (count['k'] != 1 || count['K'] != 1)
             return false;
 
-        //print(std::cerr);
+        //print(debugOut);
 
         //if (!canMove(opposideSide(playerOnMove)))
           //  return false;
@@ -1059,8 +1026,8 @@ struct Variation {
         //}
 
         //{
-        //    std::cerr << "Found it" << nl << std::flush;
-        //    print(std::cerr);
+        //    debugOut << "Found it" << nl << std::flush;
+        //    print(debugOut);
         //}
 
 
@@ -1109,9 +1076,11 @@ struct Variation {
                         foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), depth, alpha, beta, valueSoFar);
                     }
 
-                    if (depth == depthW && options.MultiPV == 1) [[unlikely]]
+                    //assert(variationDepth == depthW);
+
+                    if (depth == variationDepth && options.MultiPV == 1) [[unlikely]]
                         {
-                            //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                            //std::osyncstream(debugOut) << "alpha: " << alpha << ", beta: " << beta << std::endl;
                             switch (board.playerOnMove)
                             {
                             case PlayerSide::WHITE: {
@@ -1123,7 +1092,7 @@ struct Variation {
                             default:
                                 std::unreachable();
                             }
-                            //std::osyncstream(std::cerr) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                            //std::osyncstream(debugOut) << "alpha: " << alpha << ", beta: " << beta << std::endl;
                         }
 
 
@@ -1190,12 +1159,12 @@ struct Variation {
                             bestValue = 0;//When we return 0, stalemate is preffered only if losing (0 is better than negative)
                             //if (valueSoFar * playerOnMove > 0)
                             //{
-                            //    //std::cerr << "Stalemate not wanted for " << (unsigned)onMove << std::endl;
+                            //    //debugOut << "Stalemate not wanted for " << (unsigned)onMove << std::endl;
                             //    bestValue = -stalePrice * playerOnMove;//Vedu, nechci dostat pat
                             //}
                             //else
                             //{
-                            //    //std::cerr << "Stalemate wanted for "<< (unsigned)onMove << std::endl;
+                            //    //debugOut << "Stalemate wanted for "<< (unsigned)onMove << std::endl;
                             //    bestValue = stalePrice * playerOnMove;//Prohrávám, dostat pat beru jako super tah
                             //}  
                         }
@@ -1250,7 +1219,8 @@ struct Variation {
         {
             float valueGained = priceTaken + priceAdjustmentPov(p, column, row); //We are entering new position with this piece
 
-            const auto wholeMovesFromRoot = ((depthW - depth) / 2);//Kolikaty tah od initial pozice (od 0), ne pultah
+            //assert(variationDepth == depthW);
+            const auto wholeMovesFromRoot = ((variationDepth - depth) / 2);//Kolikaty tah od initial pozice (od 0), ne pultah
             valueGained *= (1 - (wholeMovesFromRoot * 0.0001));//10000.0);
 
             valueSoFar += valueGained * board.playerOnMove;//Add our gained value to the score
@@ -1345,31 +1315,35 @@ struct Variation {
         if (toGenericPiece(pieceInCorner) != PieceGeneric::Rook)//The piece in the corner is not a rook or is vacant
             return;
 
-        if (saveToVector) [[unlikely]]//To optimize time, we do not check whether the path is attacked. May produce bad predictions, but only for small number of cases.
+        //assert(variationDepth == depthW);
+
+#ifdef RELAX_CASTLING_PREDICTIONS
+        if (depth+1<= variationDepth) [[unlikely]]//To optimize time, we do not check whether the path is attacked, unless the move is immediate. May produce bad predictions, but only for small number of cases.
+#endif
+        {
+            for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
             {
-                for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
+                TempSwap fieldSwap(board.pieceAt(i, row), p);
+                if (canTakeKing(oppositeSide(pieceColor(p)))) [[unlikely]]//The path is attacked by enemy
                 {
-                    TempSwap fieldSwap(board.pieceAt(i, row), p);
-                    if (canTakeKing(oppositeSide(pieceColor(p)))) [[unlikely]]//The path is attacked by enemy
-                        {
-                            return;
-                        }
+                    return;
                 }
             }
-            
-            //Now we can be sure we can do the castling
-            valueSoFar -= priceAdjustmentPov(pieceInCorner, rookColumn, row);//Remove the position score of the rook, it is leaving
-            valueSoFar += priceAdjustmentPov(pieceInCorner, newRookColumn, row);//Add the score of the rook on the next position
+        }
 
-            //Castling is not allowed from this point onwards
-            TempSwap castleLeftBackup(canICastleLeft, false);
-            TempSwap castleRightBackup(canICastleRight, false);
+        //Now we can be sure we can do the castling
+        valueSoFar -= priceAdjustmentPov(pieceInCorner, rookColumn, row);//Remove the position score of the rook, it is leaving
+        valueSoFar += priceAdjustmentPov(pieceInCorner, newRookColumn, row);//Add the score of the rook on the next position
 
-            //Do the actual piece movement
-            TempSwap rookBackup(board.pieceAt(rookColumn, row), Piece::Nothing);
-            TempSwap newRookBackup(board.pieceAt(newRookColumn, row), pieceInCorner);
-            tryPlacingPieceAt(p, newKingColumn, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
-            //State will be restored when calling destructors
+        //Castling is not allowed from this point onwards
+        TempSwap castleLeftBackup(canICastleLeft, false);
+        TempSwap castleRightBackup(canICastleRight, false);
+
+        //Do the actual piece movement
+        TempSwap rookBackup(board.pieceAt(rookColumn, row), Piece::Nothing);
+        TempSwap newRookBackup(board.pieceAt(newRookColumn, row), pieceInCorner);
+        tryPlacingPieceAt(p, newKingColumn, row, depth - 1, alpha, beta, bestValue, doNoContinue, valueSoFar);
+        //State will be restored when calling destructors
     }
 
     float bestMoveWithThisPieceScore(i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar, bool doNotContinue = false)
@@ -1713,7 +1687,7 @@ T& printScore(T& o, float scoreCp, i8 depth, PlayerSide playerOnMove)
     return o;
 }
 float lastReportedLowerBound;
-void printLowerBound()
+void printLowerBound(i8 depthW)
 {
     static std::mutex m;
     std::unique_lock lock(m);
@@ -1767,7 +1741,7 @@ void evaluateGameMove(Variation& board)//, double alpha = -std::numeric_limits<f
             }
             //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
             if (options.Verbosity >= 4)
-                printLowerBound();
+                printLowerBound(board.variationDepth);
         }
 
         board.nodes = localBoard.nodes;
@@ -1789,7 +1763,7 @@ void evaluateGameMove(Variation& board)//, double alpha = -std::numeric_limits<f
                 std::unreachable();
             }
             if (options.Verbosity >= 4)
-                printLowerBound();
+                printLowerBound(board.variationDepth);
         }
     }
 
@@ -1822,7 +1796,7 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
     {
         if (optimalTimeDepleted || criticalTimeDepleted) [[unlikely]]
             return;
-        size_t localPos = qPos++;
+        size_t localPos = qPos.fetch_add(1ull, std::memory_order_relaxed);
         if (localPos >= q.size()) [[unlikely]]//Stopper
             {
                 --qPos;
@@ -1853,7 +1827,7 @@ void cutoffBadMoves(static_vector<Variation,maxMoves>& boards)
             break;
     }
 
-    std::cerr << "Cutting off " << boards.size() - i << " bad moves to save time" << std::endl;
+    debugOut << "Cutting off " << boards.size() - i << " bad moves to save time" << std::endl;
 
     boards.resize(i);
 }
@@ -1888,7 +1862,7 @@ static_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSi
     const i8 depth = 1;
     criticalTimeDepleted = false;
     onMoveW = board.playerOnMove;
-    depthW = 1;
+    //depthW = 1;
     //totalNodesDepth = 0;
     totalNodesAll = 0;
     //saveToVector = true;
@@ -1911,7 +1885,7 @@ static_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSi
         if (std::find(playedPositions.begin(), playedPositions.end(), pos.first.board) != playedPositions.end()) [[unlikely]]
         {
             res.emplace_back(pos.first, 0, 0, 0, pos.first.playerOnMove, pos.first.findDiff(board));
-            std::cerr << "Deja vu! Found a possible move that results in an already played position. Assigning a value of a draw." << std::endl;
+            debugOut << "Deja vu! Found a possible move that results in an already played position. Assigning a value of a draw." << std::endl;
         }
         else [[likely]]
             res.emplace_back(pos.first, pos.second, pos.second, depth, pos.first.playerOnMove, pos.first.findDiff(board));
@@ -2012,7 +1986,7 @@ duration_t findBestOnSameLevel(static_vector<Variation, maxMoves>& boards, i8 de
 
         criticalTimeDepleted = false;
         onMoveW = onMoveResearched;
-        depthW = depth;
+        //depthW = depth;
         q.clear();
         qPos = 0;
 
@@ -2023,10 +1997,13 @@ duration_t findBestOnSameLevel(static_vector<Variation, maxMoves>& boards, i8 de
         //if(options.MultiPV<=1)
         //    evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
 
+        static_vector<std::thread, maxMoves> threads;
 
-        static_vector<std::thread, 256> threads;
-        threads.reserve(options.Threads - 1);
-        for (size_t i = 1; i < options.Threads; ++i)
+        size_t optimalThreadCount = std::min(boards.size(), options.Threads);
+
+        //threads.reserve(optimalThreadCount - 1);//Not needed, safety check
+
+        for (size_t i = 1; i < optimalThreadCount; ++i)
             threads.emplace_back(workerFromQ, i);
 
         workerFromQ(0);//Do some work on this thread
@@ -2037,22 +2014,32 @@ duration_t findBestOnSameLevel(static_vector<Variation, maxMoves>& boards, i8 de
         q.clear();
         //transpositions.clear();
 
+
+        if (qPos != boards.size())
+        {
+            debugOut << "Not enough time to search all moves. Only managed to fully go through " << qPos << " out of " << boards.size() << std::endl;
+        }
+
+        if ((optimalTimeDepleted || criticalTimeDepleted) && (qPos <= threads.size()))//Not a single board came through
+            return duration_t(std::numeric_limits<double>::infinity());
+
         for (const auto& i : boards)
             totalNodesDepth += i.nodes;
     }
     totalNodesAll += totalNodesDepth;
 
-    if (qPos != boards.size())
-    {
-        std::cerr << "Not enough time to search all moves. Only managed to fully go through " << qPos << " out of " << boards.size() << std::endl;
-    }
-
-    if ((optimalTimeDepleted || criticalTimeDepleted) && (qPos <= options.Threads))//Not a single board came through
-        return duration_t(0);
 
     boards.resize(qPos);
 
-    auto timeFirstBoard = boards.front().time;
+    duration_t timeFirstBoard;
+
+    {
+        size_t i = 0;
+        do
+        {
+            timeFirstBoard = boards[i++].time;
+        } while (timeFirstBoard.count() <= 0);
+    }
 
     switch (onMoveResearched)
     {
@@ -2071,7 +2058,7 @@ duration_t findBestOnSameLevel(static_vector<Variation, maxMoves>& boards, i8 de
 
 
     //float scoreCp = boards.front().bestFoundValue;
-    //std::cerr << "ScoreCP: " << scoreCp << std::endl;
+    //debugOut << "ScoreCP: " << scoreCp << std::endl;
 
     //if (criticalTimeDepleted)
     //    return;
@@ -2082,10 +2069,11 @@ duration_t findBestOnSameLevel(static_vector<Variation, maxMoves>& boards, i8 de
             printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, options.MultiPV == 1, oppositeSide(onMoveW));
     }
 
-    //if (options.Verbosity >= 2)
-    printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards.front(), 1, false, oppositeSide(onMoveW));
-
-    std::cout << std::flush;
+    if (options.Verbosity >= 1) //TODO: make it available to print later for the last depth if verbosity is set to 1, do not print every time unless >= 2.
+    {
+        printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards.front(), 1, false, oppositeSide(onMoveW));
+        std::cout << std::flush;
+    }
 
     return timeFirstBoard;
 }
@@ -2240,7 +2228,7 @@ GameState posFromString(std::string_view str, static_vector<std::array<Piece, 64
         parseMoves(res, str, playedPositions);
 
 #ifdef _DEBUG
-        res.print(std::cerr);
+        res.print(debugOut);
 #endif
         return res;
     }
@@ -2265,7 +2253,7 @@ Variation findBestInNumberOfMoves(GameState& board, i8 moves)
     Variation res;
     //dynamicPositionRanking = true;
 
-    std::wcout << "Depth: ";
+    out << "Depth: ";
     for (i8 i = 4; i <= moves; i += 2) {
         auto bestPosFound = findBestOnSameLevel(boardList, i);
         //dynamicPositionRanking = false;
@@ -2275,9 +2263,9 @@ Variation findBestInNumberOfMoves(GameState& board, i8 moves)
         {
             res = boardList.front();
         }
-        std::wcout << i << ' ';
+        out << i << ' ';
     }
-    std::wcout << std::endl;
+    out << std::endl;
 
     return res;
 }
@@ -2306,15 +2294,15 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
         //if (ponder)
         //{
-        //    std::cerr << "We are pondering, enemy time is our time" << std::endl;
+        //    debugOut << "We are pondering, enemy time is our time" << std::endl;
         //    timeTargetMax += playerTime[(oppositeSide(board.playerOnMove) + 1) / 2];
         //    timeTargetOptimal += playerTime[(oppositeSide(board.playerOnMove) + 1) / 2];
         //}
     }
 
 
-    std::cerr << "Targeting " << timeTargetOptimal.count() << " ms." << std::endl;
-    std::cerr << "Highest I can go is " << timeTargetMax.count() << " ms." << std::endl;
+    debugOut << "Targeting " << timeTargetOptimal.count() << " ms." << std::endl;
+    debugOut << "Highest I can go is " << timeTargetMax.count() << " ms." << std::endl;
 
     criticalTimeDepleted = false;
     optimalTimeDepleted = false;
@@ -2333,7 +2321,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                 if (cvTimeout.wait_for(l, timeTargetMax - duration_t(5)) == std::cv_status::timeout)
                 {
                     criticalTimeDepleted = true;
-                    std::cerr << std::endl << std::endl << "Critical timeout! Terminating running computations ASAP" << std::endl << std::endl << std::endl;
+                    debugOut << std::endl << std::endl << "Critical timeout! Terminating running computations ASAP" << std::endl << std::endl << std::endl;
                 }
 
             });
@@ -2347,7 +2335,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                 if (cvTimeout.wait_for(l, timeTargetOptimal) == std::cv_status::timeout)
                 {
                     optimalTimeDepleted = true;
-                    std::cerr << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
+                    debugOut << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
                 }
 
             });
@@ -2361,7 +2349,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
     static_vector<std::pair<duration_t, Variation>, 2> previousResults;
 
-    //std::cerr << "Depth: ";
+    //debugOut << "Depth: ";
 
     for (size_t i = 4; i <= maxDepth; i += 2) {
         if(options.Verbosity >= 2)
@@ -2387,20 +2375,20 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
         //dynamicPositionRanking = false;
 
         //res = bestPosFound;
-        std::cerr << "Elapsed for first variation: " << timeFirstVariation.count() << std::endl;
-        //std::cerr << i + 1 << ' ';
+        debugOut << "Elapsed for first variation: " << timeFirstVariation.count() << std::endl;
+        //debugOut << i + 1 << ' ';
 
         if (round(abs(scoreCp) / matePrice) > 0)
         {
-            std::cerr << "Mate possibility, no need to search further" << std::endl;
+            debugOut << "Mate possibility, no need to search further" << std::endl;
             break;
         }
 
-        //std::cerr << " is " << elapsed << std::endl;
+        //debugOut << " is " << elapsed << std::endl;
 
         if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
         {
-            std::cerr << "Emergency stop!" << std::endl;
+            debugOut << "Emergency stop!" << std::endl;
             break;
         }
 
@@ -2424,19 +2412,19 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
             growth *= branchingFactor;
 
             //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
-            //std::cerr << "log is " << growth << std::endl;
+            //debugOut << "log is " << growth << std::endl;
             auto projectedNextTime = duration_t(pow(2, growth));
-            std::cerr << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
+            debugOut << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
 
             if (projectedNextTime > (timeTargetMax - elapsedTotal))//.
             {
-                std::cerr << "We wouldn't get a result in required time" << std::endl;
+                debugOut << "We wouldn't get a result in required time" << std::endl;
                 break;
             }
 
             if (projectedNextTime <= (timeTargetOptimal - elapsedTotal))//
             {
-                std::cerr << "We are easily gonna fit in the optimal time frame" << std::endl;
+                debugOut << "We are easily gonna fit in the optimal time frame" << std::endl;
                 continue;
             }
 
@@ -2444,15 +2432,15 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
             //It makes sense to do more if the results are unstable
 
 
-            std::cerr << "Last two diff is " << diff << std::endl;
+            debugOut << "Last two diff is " << diff << std::endl;
 
             if(foundSameBestMove || diff < 50)//The difference is too small, we probably wouldn't get much further info.
             {
-                std::cerr << "We could start another depth, but it's probably not necessary." << std::endl;
+                debugOut << "We could start another depth, but it's probably not necessary." << std::endl;
                 break;
             }
             else
-                std::cerr << "This time, we are using some extra time to really think about this move." << std::endl;
+                debugOut << "This time, we are using some extra time to really think about this move." << std::endl;
 
 
         }
@@ -2469,8 +2457,9 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 }
 
 
-int uci(std::istream& in)
+int uci(std::istream& in, std::ostream& output)
 {
+    outStream = &output;
     //while (true)
     //{
         //std::string command;
@@ -2489,7 +2478,7 @@ int uci(std::istream& in)
         
         if (!in.good()) [[unlikely]]
         {
-            std::cerr << "End of input stream, rude! End the uci session with 'quit' in a controlled way." << std::endl;
+            debugOut << "End of input stream, rude! End the uci session with 'quit' in a controlled way." << std::endl;
             return -1;
         }
             
@@ -2513,7 +2502,7 @@ int uci(std::istream& in)
             out << "id name Klara Destroyer" << nl
                 << "id author Matej Kocourek" << nl
                 << "option name MultiPV type spin min 1 max 218 default " << options.MultiPV << nl
-                << "option name Threads type spin min 1 max 256 default " << options.Threads << nl
+                << "option name Threads type spin min 1 max 255 default " << options.Threads << nl
                 << "option name Verbosity type spin min 0 max 7 default " << options.Verbosity << nl
                 << "uciok" << nl
                 << std::flush;
@@ -2529,7 +2518,7 @@ int uci(std::istream& in)
         }
         else if (commandFirst == "quit")
         {
-            std::cerr << "Bye!" << std::endl;
+            debugOut << "Bye!" << std::endl;
             return 0;
         }
         else if (commandFirst == "position")
@@ -2549,25 +2538,25 @@ int uci(std::istream& in)
             auto optionValue = getWord(commandView);
             if (optionName == "MultiPV")
             {
-                //std::cerr << "Option value was: " << optionValue << std::endl;
+                //debugOut << "Option value was: " << optionValue << std::endl;
                 options.MultiPV = std::atoll(optionValue.data());
-                std::cerr << "Setting MultiPV to " << options.MultiPV << std::endl;
+                debugOut << "Setting MultiPV to " << options.MultiPV << std::endl;
             }
             else if (optionName == "Threads")
             {
-                //std::cerr << "Option value was: " << optionValue << std::endl;
+                //debugOut << "Option value was: " << optionValue << std::endl;
                 options.Threads = std::atoll(optionValue.data());
-                std::cerr << "Setting Threads to " << options.Threads << std::endl;
+                debugOut << "Setting Threads to " << options.Threads << std::endl;
             }
             else if (optionName == "Verbosity")
             {
-                //std::cerr << "Option value was: " << optionValue << std::endl;
+                //debugOut << "Option value was: " << optionValue << std::endl;
                 options.Verbosity = std::atoll(optionValue.data());
-                std::cerr << "Setting Verbosity to " << options.Verbosity << std::endl;
+                debugOut << "Setting Verbosity to " << options.Verbosity << std::endl;
             }
             else
             {
-                std::cerr << "This option is not recognized. Skipping." << std::endl;
+                debugOut << "This option is not recognized. Skipping." << std::endl;
             }
         }
         else if (commandFirst == "go")
@@ -2607,7 +2596,7 @@ int uci(std::istream& in)
         }
         else
         {
-            std::cerr << "Not recognized command, ignoring: " << commandFirst << std::endl;
+            debugOut << "Not recognized command, ignoring: " << commandFirst << std::endl;
         }
     }
     //}
@@ -2627,154 +2616,14 @@ void benchmark(i8 depth, GameState board)
 
     //std::string_view move = result.firstMoveNotation.data();
     //executeMove(board, move);
-    std::wcout << result.firstMoveNotation.data() << std::endl;
+    out << result.firstMoveNotation.data() << std::endl;
 
-    std::wcout << "cp: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
+    out << "cp: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
 
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
-    std::wcout << "Done in " << elapsed << "s." << std::endl;
+    out << "Done in " << elapsed << "s." << std::endl;
 
     //board.printW();
 }
 
-auto benchmark(size_t depth)
-{
-    std::stringstream ss;
-    ss << "uci\nisready\nposition startpos\ngo infinite depth " << depth << "\nquit\n";
-    std::cerr << ss.str() << std::endl;
-    return uci(ss);
-}
-
-
-}
-
-int main(int argc, char** argv) {
-    using namespace KlaraDestroyer;
-    std::ios_base::sync_with_stdio(false);
-    //out.setf(std::ios::fixed, std::ios::floatfield);
-    //out.setf(std::ios::showpoint);
-    std::cerr.setf(std::ios::fixed, std::ios::floatfield);
-    std::cerr.setf(std::ios::showpoint);
-
-    //std::cerr.sync_with_stdio(false);
-    if (argc > 1)
-    {
-        //out.sync_with_stdio(false);
-        //out.precision(2);
-#if out == std::wcout
-        init_locale();
-#endif
-
-        std::string_view argument(argv[1]);
-        if (argument == "bench")
-        {
-            deterministic = true;
-            if (argc < 3)
-                return 1;
-            int n = std::atoi(argv[2]);
-            benchmark(n);
-        }
-#ifdef _DEBUG
-        else if (argument == "test")
-        {
-            deterministic = true;
-            if (argc < 3)
-                return 1;
-            int n = std::atoi(argv[2]);
-            
-            switch (n)
-            {
-            case(1):
-            {
-                GameState promotion;
-                promotion.pieceAt('h', '5') = Piece::PawnBlack;
-                promotion.pieceAt('d', '5') = Piece::PawnBlack;
-                promotion.pieceAt('f', '5') = Piece::KingBlack;
-                promotion.pieceAt('g', '1') = Piece::BishopBlack;
-                promotion.pieceAt('e', '2') = Piece::KingWhite;
-                promotion.pieceAt('b', '5') = Piece::PawnWhite;
-                promotion.pieceAt('a', '6') = Piece::PawnWhite;
-                promotion.playerOnMove = PlayerSide::WHITE;
-
-                promotion.print();
-
-                benchmark(8, promotion);
-            } break;
-            case (2):
-            {
-                GameState testMatu;
-                testMatu.pieceAt('h', '8') = Piece::KingBlack;
-                testMatu.pieceAt('a', '1') = Piece::KingWhite;
-                testMatu.pieceAt('g', '1') = Piece::RookWhite;
-                testMatu.pieceAt('a', '7') = Piece::RookWhite;
-                testMatu.pieceAt('b', '1') = Piece::QueenWhite;
-                testMatu.pieceAt('c', '7') = Piece::PawnWhite;
-                testMatu.playerOnMove = PlayerSide::WHITE;
-                testMatu.print();
-
-                benchmark(8, testMatu);
-            } break;
-            case (3):
-            {
-                GameState testMatu;
-                testMatu.pieceAt('h', '8') = Piece::KingBlack;
-                testMatu.pieceAt('h', '7') = Piece::PawnWhite;
-                testMatu.pieceAt('g', '6') = Piece::PawnWhite;
-                testMatu.pieceAt('h', '6') = Piece::KingWhite;
-                testMatu.pieceAt('h', '5') = Piece::PawnWhite;
-                testMatu.pieceAt('g', '5') = Piece::PawnWhite;
-
-                //testMatu.deleteAndOverwritePiece('h', '4', &kingWhite);
-                //testMatu.deleteAndOverwritePiece('h', '3', &pawnWhite);
-                //testMatu.deleteAndOverwritePiece('g', '3', &pawnWhite);
-                //testMatu.deleteAndOverwritePiece('g', '4', &pawnWhite);
-
-                testMatu.playerOnMove = PlayerSide::WHITE;
-                testMatu.print();
-
-                benchmark(8, testMatu);
-            } break;
-            case (4):
-            {
-                GameState test = GameState::startingPosition();
-                //constexpr auto tmp = test.piecesCount();
-
-                test.pieceAt('b', '1') = Piece::Nothing;
-                test.pieceAt('c', '1') = Piece::Nothing;
-                test.pieceAt('d', '1') = Piece::Nothing;
-                test.pieceAt('f', '1') = Piece::Nothing;
-                test.pieceAt('g', '1') = Piece::Nothing;
-
-                test.playerOnMove = PlayerSide::WHITE;
-                test.print();
-
-                benchmark(8, test);
-            } break;
-            case (5):
-            {
-                constexpr auto test = GameState::startingPosition();
-                constexpr auto balance = test.balance();
-                constexpr auto counter = test.piecesCount();
-                constexpr auto min = test.countPiecesMin();
-            } break;
-
-            default:
-                break;
-            }
-        }
-#endif
-        else
-        {
-            std::cerr << "Unknown argument" << std::endl;
-            return 1;
-        }
-    }
-    else
-    {
-        deterministic = false;
-        return uci(std::cin);
-    }
-        
-
-    return 0;
 }
