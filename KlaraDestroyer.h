@@ -2347,104 +2347,113 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
     Variation bestPosFound;
 
-    static_vector<std::pair<duration_t, Variation>, 2> previousResults;
-
-    //debugOut << "Depth: ";
-
-    for (size_t i = 4; i <= maxDepth; i += 2) {
-        if(options.Verbosity >= 2)
-            out << "info " << "depth " << unsigned(i) << nl << std::flush;
-
-        size_t availableMoveCount = boardList.size();
-
-        uciGoM.unlock();//Allow interruption in the middle of calcuation
-        duration_t timeFirstVariation = findBestOnSameLevel(boardList, i);
-        uciGoM.lock();
-
-        bool searchedThroughAllMoves = boardList.size() == availableMoveCount;
+    if (boardList.size() > 1)//If there is only one possible move to be played, no need to think about anything
+    {
+        static_vector<std::pair<duration_t, Variation>, 2> previousResults;
 
 
-        bestPosFound = boardList.front();
+        for (size_t i = 4; i <= maxDepth; i += 2) {
+            if (options.Verbosity >= 2)
+                out << "info " << "depth " << unsigned(i) << nl << std::flush;
 
-        auto elapsedTotal = duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
+            size_t availableMoveCount = boardList.size();
 
-        float scoreCp = bestPosFound.bestFoundValue;
+            uciGoM.unlock();//Allow interruption in the middle of calcuation
+            duration_t timeFirstVariation = findBestOnSameLevel(boardList, i);
+            uciGoM.lock();
 
-
-
-        //dynamicPositionRanking = false;
-
-        //res = bestPosFound;
-        debugOut << "Elapsed for first variation: " << timeFirstVariation.count() << std::endl;
-        //debugOut << i + 1 << ' ';
-
-        if (round(abs(scoreCp) / matePrice) > 0)
-        {
-            debugOut << "Mate possibility, no need to search further" << std::endl;
-            break;
-        }
-
-        //debugOut << " is " << elapsed << std::endl;
-
-        if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
-        {
-            debugOut << "Emergency stop!" << std::endl;
-            break;
-        }
-
-        previousResults.emplace_back(timeFirstVariation, bestPosFound);
-
-        if (previousResults.size() >= 2)
-        {
-            double logOlder = log2(previousResults[0].first.count());
-            double logNewer = log2(previousResults[1].first.count());
-            bool foundSameBestMove = previousResults[1].second.firstMoveNotation == previousResults[0].second.firstMoveNotation;
-            float diff = std::abs(previousResults[1].second.bestFoundValue - previousResults[0].second.bestFoundValue);
+            bool searchedThroughAllMoves = boardList.size() == availableMoveCount;
 
 
-            previousResults[0] = previousResults[1];
-            previousResults.pop_back();
+            bestPosFound = boardList.front();
+
+            auto elapsedTotal = duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
+
+            float scoreCp = bestPosFound.bestFoundValue;
 
 
-            double growth = logNewer + logNewer - logOlder;
 
-            constexpr double branchingFactor = 1.0;
-            growth *= branchingFactor;
+            //dynamicPositionRanking = false;
 
-            //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
-            //debugOut << "log is " << growth << std::endl;
-            auto projectedNextTime = duration_t(pow(2, growth));
-            debugOut << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
+            //res = bestPosFound;
+            debugOut << "Elapsed for first variation: " << timeFirstVariation.count() << std::endl;
+            //debugOut << i + 1 << ' ';
 
-            if (projectedNextTime > (timeTargetMax - elapsedTotal))//.
+            if (round(abs(scoreCp) / matePrice) > 0)
             {
-                debugOut << "We wouldn't get a result in required time" << std::endl;
+                debugOut << "Mate possibility, no need to search further" << std::endl;
                 break;
             }
 
-            if (projectedNextTime <= (timeTargetOptimal - elapsedTotal))//
+            //debugOut << " is " << elapsed << std::endl;
+
+            if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
             {
-                debugOut << "We are easily gonna fit in the optimal time frame" << std::endl;
-                continue;
-            }
-
-            //Here we calculate if it makes sense to do more calculations.
-            //It makes sense to do more if the results are unstable
-
-
-            debugOut << "Last two diff is " << diff << std::endl;
-
-            if(foundSameBestMove || diff < 50)//The difference is too small, we probably wouldn't get much further info.
-            {
-                debugOut << "We could start another depth, but it's probably not necessary." << std::endl;
+                debugOut << "Emergency stop!" << std::endl;
                 break;
             }
-            else
-                debugOut << "This time, we are using some extra time to really think about this move." << std::endl;
+
+            previousResults.emplace_back(timeFirstVariation, bestPosFound);
+
+            if (previousResults.size() >= 2)
+            {
+                double logOlder = log2(previousResults[0].first.count());
+                double logNewer = log2(previousResults[1].first.count());
+                bool foundSameBestMove = previousResults[1].second.firstMoveNotation == previousResults[0].second.firstMoveNotation;
+                float diff = std::abs(previousResults[1].second.bestFoundValue - previousResults[0].second.bestFoundValue);
 
 
+                previousResults[0] = previousResults[1];
+                previousResults.pop_back();
+
+
+                double growth = logNewer + logNewer - logOlder;
+
+                constexpr double branchingFactor = 1.0;
+                growth *= branchingFactor;
+
+                //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
+                //debugOut << "log is " << growth << std::endl;
+                auto projectedNextTime = duration_t(pow(2, growth));
+                debugOut << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
+
+                if (projectedNextTime > (timeTargetMax - elapsedTotal))//.
+                {
+                    debugOut << "We wouldn't get a result in required time" << std::endl;
+                    break;
+                }
+
+                if (projectedNextTime <= (timeTargetOptimal - elapsedTotal))//
+                {
+                    debugOut << "We are easily gonna fit in the optimal time frame" << std::endl;
+                    continue;
+                }
+
+                //Here we calculate if it makes sense to do more calculations.
+                //It makes sense to do more if the results are unstable
+
+
+                debugOut << "Last two diff is " << diff << std::endl;
+
+                if (foundSameBestMove || diff < 50)//The difference is too small, we probably wouldn't get much further info.
+                {
+                    debugOut << "We could start another depth, but it's probably not necessary." << std::endl;
+                    break;
+                }
+                else
+                    debugOut << "This time, we are using some extra time to really think about this move." << std::endl;
+
+
+            }
         }
     }
+    else
+    {
+        debugOut << "Only one move possible, no need to think about anything" << std::endl;
+        bestPosFound = std::move(boardList[0]);
+    }
+
+
     out << "bestmove " << bestPosFound.firstMoveNotation.data() << nl << std::flush;
 
     if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
