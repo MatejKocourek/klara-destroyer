@@ -2309,13 +2309,14 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
     std::mutex mTimeoutCritical;
     std::mutex mTimeoutOptimal;
     std::condition_variable cvTimeout;
+    std::atomic<uint8_t> timeoutThreadsWaiting = 2;
 
     std::thread criticalTimeout;
     std::thread optimalTimeout;
 
     if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
     {
-        criticalTimeout = std::thread([&cvTimeout, &mTimeoutCritical, timeTargetMax]()
+        criticalTimeout = std::thread([&cvTimeout, &mTimeoutCritical, timeTargetMax, &timeoutThreadsWaiting]()
             {
                 std::unique_lock<std::mutex> l(mTimeoutCritical);
                 if (cvTimeout.wait_for(l, timeTargetMax - duration_t(5)) == std::cv_status::timeout)
@@ -2323,13 +2324,13 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                     criticalTimeDepleted = true;
                     debugOut << std::endl << std::endl << "Critical timeout! Terminating running computations ASAP" << std::endl << std::endl << std::endl;
                 }
-
+                timeoutThreadsWaiting--;
             });
         //threadTimeout.detach();
     }
     if (timeTargetOptimal != duration_t(std::numeric_limits<double>::infinity()))
     {
-        optimalTimeout = std::thread([&cvTimeout, &mTimeoutOptimal, timeTargetOptimal]()
+        optimalTimeout = std::thread([&cvTimeout, &mTimeoutOptimal, timeTargetOptimal, &timeoutThreadsWaiting]()
             {
                 std::unique_lock<std::mutex> l(mTimeoutOptimal);
                 if (cvTimeout.wait_for(l, timeTargetOptimal) == std::cv_status::timeout)
@@ -2337,7 +2338,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                     optimalTimeDepleted = true;
                     debugOut << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
                 }
-
+                timeoutThreadsWaiting--;
             });
         //threadTimeout.detach();
     }
@@ -2347,7 +2348,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
     Variation bestPosFound;
 
-    if (boardList.size() > 1)//If there is only one possible move to be played, no need to think about anything
+    if (boardList.size() > 1) [[likely]]//If there is only one possible move to be played, no need to think about anything
     {
         static_vector<std::pair<duration_t, Variation>, 2> previousResults;
 
@@ -2394,11 +2395,12 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
             }
 
             previousResults.emplace_back(timeFirstVariation, bestPosFound);
+            
 
-            if (previousResults.size() >= 2)
+            if (previousResults.size() >= 2)//We have enough data to predict next move time
             {
                 double logOlder = log2(previousResults[0].first.count());
-                double logNewer = log2(previousResults[1].first.count());
+                double logNewer = log2(previousResults.back().first.count());
                 bool foundSameBestMove = previousResults[1].second.firstMoveNotation == previousResults[0].second.firstMoveNotation;
                 float diff = std::abs(previousResults[1].second.bestFoundValue - previousResults[0].second.bestFoundValue);
 
@@ -2413,7 +2415,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                 growth *= branchingFactor;
 
                 //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
-                //debugOut << "log is " << growth << std::endl;
+                debugOut << "branching factor is " << growth << std::endl;
                 auto projectedNextTime = duration_t(pow(2, growth));
                 debugOut << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
 
@@ -2442,8 +2444,14 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                 }
                 else
                     debugOut << "This time, we are using some extra time to really think about this move." << std::endl;
-
-
+            }
+            else
+            {
+                if (elapsedTotal >= timeTargetOptimal)//Emergency stop if we depleted time
+                {
+                    debugOut << "Emergency stop! (first depth)" << std::endl;
+                    break;
+                }
             }
         }
     }
@@ -2458,7 +2466,11 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
     if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
     {
-        cvTimeout.notify_all();//Cancel the timeout timer
+        do
+        {
+            cvTimeout.notify_all();//Cancel the timeout timer
+        } while (timeoutThreadsWaiting != 0);//Have to wait for the threads to be notified, if not started yet
+
 
         criticalTimeout.join();
         optimalTimeout.join();
