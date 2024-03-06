@@ -20,6 +20,7 @@
 #include <iostream>
 #include <sstream>
 #include "static_vector.h"
+#include "fixed_string.h"
 
 //std::cout
 
@@ -55,6 +56,7 @@ typedef int_fast64_t i64;
 typedef uint_fast64_t u64;
 
 typedef std::chrono::duration<double, std::milli> duration_t;
+typedef fixed_string<6> moveNotation;
 
 class GameState;
 
@@ -106,7 +108,7 @@ enum Piece : i8
 static std::atomic<bool> criticalTimeDepleted;
 static std::atomic<bool> optimalTimeDepleted;
 static constexpr bool dynamicPositionRanking = false;//Not needed, static ranking is faster and should be enough
-//static i8 depthW;
+static i8 fullDepth;
 static PlayerSide onMoveW;
 static bool deterministic;
 static std::chrono::steady_clock::time_point timeGlobalStarted;
@@ -133,6 +135,8 @@ struct Options {
     size_t Threads;
     size_t Verbosity;
 } options;
+
+bool firstLevelPruning = false;
 
 constexpr inline PlayerSide oppositeSide(PlayerSide side) noexcept
 {
@@ -681,9 +685,9 @@ public:
     }
 
 
-    std::array<char, 6> findDiff(const GameState& old) const
+    moveNotation findDiff(const GameState& old) const
     {
-        std::array<char, 6> res = { 0 };
+        moveNotation res(5,'\0');
 
         Piece oldPiece = Piece::Nothing;
 
@@ -836,7 +840,7 @@ struct Variation {
     //std::chrono::duration<float, std::milli> researchedTime{0};
 
     PlayerSide firstMoveOnMove;
-    std::array<char, 6> firstMoveNotation{ '\0' };
+    moveNotation firstMoveNotation;
 
     std::vector<std::pair<GameState, float>> firstPositions;
     bool saveToVector = false;
@@ -867,7 +871,7 @@ struct Variation {
 
     //Variation(GameState researchedBoard, double bestFoundValue, double startingValue):researchedBoard(move(researchedBoard)),bestFoundValue(bestFoundValue), startingValue(startingValue) {}
     //Variation(GameState board, float startingValue) :board(std::move(board)), bestFoundValue(startingValue), startingValue(startingValue) {}
-    Variation(GameState board, float bestFoundValue, float startingValue, i8 variationDepth, PlayerSide firstMoveOnMove, std::array<char, 6> firstMoveNotation) :board(std::move(board)), bestFoundValue(bestFoundValue), startingValue(startingValue), variationDepth(variationDepth), firstMoveOnMove(firstMoveOnMove), firstMoveNotation(firstMoveNotation){}
+    Variation(GameState board, float bestFoundValue, float startingValue, i8 variationDepth, PlayerSide firstMoveOnMove, moveNotation firstMoveNotation) :board(std::move(board)), bestFoundValue(bestFoundValue), startingValue(startingValue), variationDepth(variationDepth), firstMoveOnMove(firstMoveOnMove), firstMoveNotation(firstMoveNotation){}
 
 
 
@@ -1078,39 +1082,39 @@ struct Variation {
 
                     //assert(variationDepth == depthW);
 
-                    if (depth == variationDepth && options.MultiPV == 1) [[unlikely]]
+                    if (firstLevelPruning && depth == variationDepth) [[unlikely]]
+                    {
+                        //std::osyncstream(debugOut) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                        switch (board.playerOnMove)
                         {
-                            //std::osyncstream(debugOut) << "alpha: " << alpha << ", beta: " << beta << std::endl;
-                            switch (board.playerOnMove)
-                            {
-                            case PlayerSide::WHITE: {
-                                beta = alphaOrBeta;
-                            } break;
-                            case PlayerSide::BLACK: {
-                                alpha = alphaOrBeta;
-                            } break;
-                            default:
-                                std::unreachable();
-                            }
-                            //std::osyncstream(debugOut) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                        case PlayerSide::WHITE: {
+                            beta = alphaOrBeta;
+                        } break;
+                        case PlayerSide::BLACK: {
+                            alpha = alphaOrBeta;
+                        } break;
+                        default:
+                            std::unreachable();
                         }
+                        //std::osyncstream(debugOut) << "alpha: " << alpha << ", beta: " << beta << std::endl;
+                    }
 
 
-                            if (foundVal * board.playerOnMove > bestValue * board.playerOnMove) {
-                                bestValue = foundVal;
-                            }
-                        if (foundVal * board.playerOnMove == pricePiece(PieceGeneric::King))//Je možné vzít krále, hra skončila
-                        {
-                            //wcout << endl;
-                            //print();
-                            //break;
-                            return foundVal;//*depth;
-                        }
-                        if (beta <= alpha)
-                        {
-                            break;
-                            //depthToPieces = 0;
-                        }
+                    if (foundVal * board.playerOnMove > bestValue * board.playerOnMove) {
+                        bestValue = foundVal;
+                    }
+                    if (foundVal * board.playerOnMove == pricePiece(PieceGeneric::King))//Je možné vzít krále, hra skončila
+                    {
+                        //wcout << endl;
+                        //print();
+                        //break;
+                        return foundVal;//*depth;
+                    }
+                    if (beta <= alpha)
+                    {
+                        break;
+                        //depthToPieces = 0;
+                    }
                 }
             }
         else [[likely]]
@@ -1687,7 +1691,7 @@ T& printScore(T& o, float scoreCp, i8 depth, PlayerSide playerOnMove)
     return o;
 }
 float lastReportedLowerBound;
-void printLowerBound(i8 depthW)
+void printLowerBound(i8 depth)
 {
     static std::mutex m;
     std::unique_lock lock(m);
@@ -1696,8 +1700,11 @@ void printLowerBound(i8 depthW)
     if (currentLowerBound*onMoveW < lastReportedLowerBound * onMoveW)
     {
         std::osyncstream syncout(out);
-        syncout << "info " << "depth " << depthW + 1 << ' ';
-        printScore(syncout, currentLowerBound, depthW + 1, oppositeSide(onMoveW));
+        syncout << "info depth " << fullDepth << ' ';
+        if (depth + 1 != fullDepth)
+            syncout << "seldepth " << depth + 1;
+
+        printScore(syncout, currentLowerBound, depth + 1, oppositeSide(onMoveW));
         syncout << ' ';
         syncout << "lowerbound";
         syncout << nl << std::flush;
@@ -1712,15 +1719,14 @@ std::optional<duration_t> timeForTheFirst;
 
 void evaluateGameMove(Variation& board)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
 {
-    if (board.variationDepth > 0) [[likely]]
+    if (board.variationDepth > 0) [[likely]] //Not predetermined result - e.g. not a draw by repetition
     {
         auto timeStart = std::chrono::high_resolution_clock::now();
         Variation localBoard(board);
 
-        if (options.MultiPV > 1)//If we want to know multiple good moves, we cannot prune using a/B at root level
+        if (!firstLevelPruning)//If we want to know multiple good moves, we cannot prune using a/B at root level
         {
             board.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, board.startingValue, -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
-            //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
         }
         else
         {
@@ -1728,44 +1734,32 @@ void evaluateGameMove(Variation& board)//, double alpha = -std::numeric_limits<f
             {
             case PlayerSide::BLACK: {
                 board.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, board.startingValue, alphaOrBeta, std::numeric_limits<float>::infinity());
-                update_max(alphaOrBeta, board.bestFoundValue);
-                //alphaOrBeta = std::max(alphaOrBeta * 1.0, researchedBoard->bestFoundValue * 1.0);
             } break;
             case PlayerSide::WHITE: {
                 board.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, board.startingValue, -std::numeric_limits<float>::infinity(), alphaOrBeta);
-                update_min(alphaOrBeta, board.bestFoundValue);
-                //alphaOrBeta = std::min(alphaOrBeta * 1.0, researchedBoard->bestFoundValue * 1.0);
             } break;
             default:
                 std::unreachable();
             }
-            //board.researchedTime = std::chrono::high_resolution_clock::now() - timeStart;
-            if (options.Verbosity >= 4)
-                printLowerBound(board.variationDepth);
         }
 
         board.nodes = localBoard.nodes;
         board.time = std::chrono::high_resolution_clock::now() - timeStart;
     }
-    else [[unlikely]] //Predetermined result - e.g. draw by repetition
+    switch (board.board.playerOnMove)
     {
-        if (options.MultiPV == 1)//If we want to know multiple good moves, we cannot prune using a/B at root level
-        {
-            switch (board.board.playerOnMove)
-            {
-            case PlayerSide::BLACK: {
-                update_max(alphaOrBeta, board.bestFoundValue);
-            } break;
-            case PlayerSide::WHITE: {
-                update_min(alphaOrBeta, board.bestFoundValue);
-            } break;
-            default:
-                std::unreachable();
-            }
-            if (options.Verbosity >= 4)
-                printLowerBound(board.variationDepth);
-        }
+    case PlayerSide::BLACK: {
+        update_max(alphaOrBeta, board.bestFoundValue);
+    } break;
+    case PlayerSide::WHITE: {
+        update_min(alphaOrBeta, board.bestFoundValue);
+    } break;
+    default:
+        std::unreachable();
     }
+
+    if (options.Verbosity >= 4)
+        printLowerBound(board.variationDepth);
 
     //totalNodesDepth += localBoard.nodes;
 }
@@ -1782,7 +1776,7 @@ void evaluateGameMoveFromQ(size_t posInQ)
         std::osyncstream(out)
             << "info "
             << "currmove "
-            << board.firstMoveNotation.data() << ' '
+            << board.firstMoveNotation.c_str() << ' '
             << "currmovenumber "
             << (posInQ + 1)
             << nl << std::flush;
@@ -1814,22 +1808,24 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
     }
 }
 
-void cutoffBadMoves(static_vector<Variation,maxMoves>& boards)
+bool cutoffBadMoves(static_vector<Variation,maxMoves>& boards, float cutoffPointRelative)
 {
-    float bestMoveScore = abs(boards.front().bestFoundValue);
+    float bestMoveScore = -boards[0].bestFoundValue * boards[0].firstMoveOnMove;
 
-    float cutoffPoint = bestMoveScore + 50;
+    float cutoffPoint = bestMoveScore - cutoffPointRelative;
 
     size_t i = 1;
-    for (i < boards.size(); ++i;)
+    for (;i < boards.size(); ++i)
     {
-        if (abs(boards[i].bestFoundValue) > cutoffPoint)
+        if ((-boards[i].bestFoundValue * boards[0].firstMoveOnMove) < cutoffPoint)
             break;
     }
 
     debugOut << "Cutting off " << boards.size() - i << " bad moves to save time" << std::endl;
 
+    bool cutOffAnything = (boards.size() - i) != 0;
     boards.resize(i);
+    return cutOffAnything;
 }
 
 
@@ -1840,7 +1836,10 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
     const auto secondsPassed = std::chrono::duration_cast<std::chrono::duration<double>>(elapsedDepth);
     out
         << "info "
-        << "depth " << unsigned(depth) << ' '
+        << "depth " << (unsigned)fullDepth << ' ';
+    if (depth != fullDepth)
+        out << "seldepth " << depth << ' ';
+    out
         << "time "  << (size_t)round(elapsedTotal.count()) << ' '
         << "nodes " << totalNodesAll << ' '
         << "nps " << (size_t)round(nodesDepth / secondsPassed.count())<< ' '
@@ -1850,7 +1849,7 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
         out << "upperbound ";
     out
         << "multipv " << moveRank << ' '
-        << "pv " << move.firstMoveNotation.data()
+        << "pv " << move.firstMoveNotation
         << nl;
 }
 
@@ -1862,6 +1861,7 @@ static_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSi
     const i8 depth = 1;
     criticalTimeDepleted = false;
     onMoveW = board.playerOnMove;
+    fullDepth = 1;
     //depthW = 1;
     //totalNodesDepth = 0;
     totalNodesAll = 0;
@@ -1870,7 +1870,7 @@ static_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSi
     if (options.Verbosity >= 2)
         out << "info depth 1" << nl << std::flush;
     //transpositions.clear();
-    Variation tmp(board, 0, 0, 1, board.playerOnMove, std::array<char,6>{ '\0' });
+    Variation tmp(board, 0, 0, 1, board.playerOnMove, "");
     tmp.saveToVector = true;
     tmp.bestMoveScore(1, 0, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
     //totalNodesDepth = tmp.nodes;
@@ -2273,6 +2273,29 @@ Variation findBestInNumberOfMoves(GameState& board, i8 moves)
 std::mutex uciGoM;
 //bool ponder = false;//TODO finish pondering
 
+duration_t predictMultiSearchTime(duration_t maxSearchTime, size_t nextMoveCount)
+{
+    float threadLoops = ceil(1.0f * nextMoveCount / options.Threads);
+    return maxSearchTime * threadLoops;
+    //return maxSearchTime;
+}
+
+duration_t predictTime(const duration_t& olderTime, const duration_t& newerTime, size_t movesCount)
+{
+    double logOlder = log2(olderTime.count());
+    double logNewer = log2(newerTime.count());
+
+    double growth = logNewer + logNewer - logOlder;
+
+    constexpr double k = 1.0;//extra branching factor
+    growth *= k;
+
+    debugOut << "branching factor is " << growth << std::endl;
+    auto projectedNextTime = predictMultiSearchTime(duration_t(pow(2, growth)), movesCount);
+    debugOut << "Projected next time is " << projectedNextTime.count() << " ms." << std::endl;
+    return projectedNextTime;
+}
+
 void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, size_t maxDepth, const static_vector<std::array<Piece, 64>, 75>& playedPositions)
 {
     std::unique_lock l(uciGoM);
@@ -2290,7 +2313,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
         const auto& myInc = playerInc[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
 
         timeTargetMax = duration_t(((myTime * gamePhase) / 2));
-        timeTargetOptimal = myInc + timeTargetMax / 4;
+        timeTargetOptimal = myInc + timeTargetMax / 8;
 
         //if (ponder)
         //{
@@ -2335,7 +2358,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                 std::unique_lock<std::mutex> l(mTimeoutOptimal);
                 if (cvTimeout.wait_for(l, timeTargetOptimal) == std::cv_status::timeout)
                 {
-                    optimalTimeDepleted = true;
+                    //optimalTimeDepleted = true;
                     debugOut << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
                 }
                 timeoutThreadsWaiting--;
@@ -2346,123 +2369,223 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
     auto boardList = generateMoves(board,board.playerOnMove, playedPositions);
 
-    Variation bestPosFound;
+    moveNotation bestPosFound;
 
-    if (boardList.size() > 1) [[likely]]//If there is only one possible move to be played, no need to think about anything
+    if (boardList.size() == 1) [[unlikely]]//If there is only one possible move to be played, no need to think about anything
     {
-        static_vector<std::pair<duration_t, Variation>, 2> previousResults;
-
-
-        for (size_t i = 4; i <= maxDepth; i += 2) {
-            if (options.Verbosity >= 2)
-                out << "info " << "depth " << unsigned(i) << nl << std::flush;
-
-            size_t availableMoveCount = boardList.size();
-
-            uciGoM.unlock();//Allow interruption in the middle of calcuation
-            duration_t timeFirstVariation = findBestOnSameLevel(boardList, i);
-            uciGoM.lock();
-
-            bool searchedThroughAllMoves = boardList.size() == availableMoveCount;
-
-
-            bestPosFound = boardList.front();
-
-            auto elapsedTotal = duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
-
-            float scoreCp = bestPosFound.bestFoundValue;
-
-
-
-            //dynamicPositionRanking = false;
-
-            //res = bestPosFound;
-            debugOut << "Elapsed for first variation: " << timeFirstVariation.count() << std::endl;
-            //debugOut << i + 1 << ' ';
-
-            if (round(abs(scoreCp) / matePrice) > 0)
-            {
-                debugOut << "Mate possibility, no need to search further" << std::endl;
-                break;
-            }
-
-            //debugOut << " is " << elapsed << std::endl;
-
-            if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
-            {
-                debugOut << "Emergency stop!" << std::endl;
-                break;
-            }
-
-            previousResults.emplace_back(timeFirstVariation, bestPosFound);
-            
-
-            if (previousResults.size() >= 2)//We have enough data to predict next move time
-            {
-                double logOlder = log2(previousResults[0].first.count());
-                double logNewer = log2(previousResults.back().first.count());
-                bool foundSameBestMove = previousResults[1].second.firstMoveNotation == previousResults[0].second.firstMoveNotation;
-                float diff = std::abs(previousResults[1].second.bestFoundValue - previousResults[0].second.bestFoundValue);
-
-
-                previousResults[0] = previousResults[1];
-                previousResults.pop_back();
-
-
-                double growth = logNewer + logNewer - logOlder;
-
-                constexpr double branchingFactor = 1.0;
-                growth *= branchingFactor;
-
-                //double growth = pow(log2(previousResults[previousResults.size() - 1].first),2) / log2(previousResults[previousResults.size() - 2].first);
-                debugOut << "branching factor is " << growth << std::endl;
-                auto projectedNextTime = duration_t(pow(2, growth));
-                debugOut << "Projected next time for the first branch is " << projectedNextTime.count() << " ms." << std::endl;
-
-                if (projectedNextTime > (timeTargetMax - elapsedTotal))//.
-                {
-                    debugOut << "We wouldn't get a result in required time" << std::endl;
-                    break;
-                }
-
-                if (projectedNextTime <= (timeTargetOptimal - elapsedTotal))//
-                {
-                    debugOut << "We are easily gonna fit in the optimal time frame" << std::endl;
-                    continue;
-                }
-
-                //Here we calculate if it makes sense to do more calculations.
-                //It makes sense to do more if the results are unstable
-
-
-                debugOut << "Last two diff is " << diff << std::endl;
-
-                if (foundSameBestMove || diff < 50)//The difference is too small, we probably wouldn't get much further info.
-                {
-                    debugOut << "We could start another depth, but it's probably not necessary." << std::endl;
-                    break;
-                }
-                else
-                    debugOut << "This time, we are using some extra time to really think about this move." << std::endl;
-            }
-            else
-            {
-                if (elapsedTotal >= timeTargetOptimal)//Emergency stop if we depleted time
-                {
-                    debugOut << "Emergency stop! (first depth)" << std::endl;
-                    break;
-                }
-            }
-        }
+        debugOut << "Only one move possible, no need to think about anything" << std::endl;
+        bestPosFound = std::move(boardList[0].firstMoveNotation);
     }
     else
     {
-        debugOut << "Only one move possible, no need to think about anything" << std::endl;
-        bestPosFound = std::move(boardList[0]);
+        static_vector<duration_t, 256> previousResults;
+
+        size_t i = 4;
+
+        //Full depth search
+        {
+            //static_vector<duration_t, 2> previousResultsFullTime;
+            for (; i <= 6; i += 2)
+            {
+                //Loking through everything in a specific depth, no cutoffs, trying to find even unlikely good moves
+
+                fullDepth = i;
+                if (options.Verbosity >= 2)
+                    out << "info depth " << i << nl << std::flush;
+
+
+                //size_t availableMoveCount = boardList.size();
+
+                uciGoM.unlock();//Allow interruption in the middle of a calculation
+                //auto startThisLayer = std::chrono::high_resolution_clock::now();
+                findBestOnSameLevel(boardList, i);
+                //auto elapsedThisLayer = duration_t(std::chrono::high_resolution_clock::now() - startThisLayer);
+                uciGoM.lock();
+
+                //debugOut << "Elapsed for this layer: " << elapsedThisLayer.count() << std::endl;
+                //previousResultsFullTime.emplace_back(elapsedThisLayer);
+
+                duration_t longestMoveElapsed = boardList[0].time;
+                for (const auto& i : boardList)
+                {
+                    if (i.time > longestMoveElapsed)
+                        longestMoveElapsed = i.time;
+                }
+                previousResults.emplace_back(longestMoveElapsed);
+                debugOut << "Elapsed for the longest move: " << longestMoveElapsed.count() << std::endl;
+
+
+                bestPosFound = boardList.front().firstMoveNotation;
+
+                if (round(abs(boardList.front().bestFoundValue) / matePrice) > 0)
+                {
+                    debugOut << "Mate possibility, no need to search further" << std::endl;
+                    goto returnResult;
+                }
+
+                if (duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted) >= timeTargetMax)//Emergency stop if we depleted time
+                {
+                    debugOut << "Time ran out while in the broad depth mode" << std::endl;
+                    goto returnResult;
+                }
+            }
+        }
+        //Continuing full depth search while in optimal time window
+        {
+            for (; ; i += 2)
+            {
+                auto projectedNextTime = predictTime(previousResults[previousResults.size() - 2], previousResults[previousResults.size() - 1], boardList.size());
+
+
+                //previousResults[0] = std::move(previousResults[1]);
+                //previousResults.pop_back();
+
+
+                if (projectedNextTime > (timeTargetOptimal - duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted)))//.
+                {
+                    debugOut << "It's time to end broad depth mode" << std::endl;
+                    break;
+                }
+                else
+                {
+                    debugOut << "There is plenty of time, continuing the broad depth mode" << std::endl;
+                }
+
+                //Loking through everything in a specific depth, no cutoffs, trying to find even unlikely good moves
+
+                fullDepth = i;
+                if (options.Verbosity >= 2)
+                    out << "info depth " << i << nl << std::flush;
+
+
+                //size_t availableMoveCount = boardList.size();
+
+                uciGoM.unlock();//Allow interruption in the middle of a calculation
+                //auto startThisLayer = std::chrono::high_resolution_clock::now();
+                findBestOnSameLevel(boardList, i);
+                //auto elapsedThisLayer = duration_t(std::chrono::high_resolution_clock::now() - startThisLayer);
+                uciGoM.lock();
+
+                duration_t longestMoveElapsed = boardList[0].time;
+                for (const auto& i : boardList)
+                {
+                    if (i.time > longestMoveElapsed)
+                        longestMoveElapsed = i.time;
+                }
+                previousResults.emplace_back(longestMoveElapsed);
+                debugOut << "Elapsed for the longest move: " << longestMoveElapsed.count() << std::endl;
+
+                //debugOut << "Elapsed for this layer: " << elapsedThisLayer.count() << std::endl;
+                //previousResultsFullTime.emplace_back(elapsedThisLayer);
+
+
+                bestPosFound = boardList.front().firstMoveNotation;
+
+                if (round(abs(boardList.front().bestFoundValue) / matePrice) > 0)
+                {
+                    debugOut << "Mate possibility, no need to search further" << std::endl;
+                    goto returnResult;
+                }
+
+                auto elapsedTotal = duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted);
+                if (elapsedTotal >= timeTargetMax)//Emergency stop if we depleted time
+                {
+                    debugOut << "Time ran out while in the broad depth mode" << std::endl;
+                    goto returnResult;
+                }
+            }
+        }
+
+        previousResults.pop_back();//Next prediction will be from selected moves
+
+        //i += 2;
+
+        debugOut << "Transitioning to selective depth mode" << std::endl;
+
+        //i += 2;
+
+        //Seldepth search
+        {
+            float centiPawnBreakingPoint = 256;
+            for (; i <= maxDepth; i += 2)
+            {
+                bool cutOff = cutoffBadMoves(boardList, centiPawnBreakingPoint);
+
+                if (fullDepth == i - 2 && !cutOff)//If we did not cut anything, the depth is still full/not selective
+                    fullDepth = i;
+
+                if (boardList.size() == 1)
+                {
+                    debugOut << "Only one good move after cutoff, no need to search further" << std::endl;
+                    goto returnResult;
+                }
+
+
+                duration_t longestMoveElapsed = boardList[0].time;
+                for (const auto& i : boardList)
+                {
+                    if (i.time > longestMoveElapsed)
+                        longestMoveElapsed = i.time;
+                }
+
+                debugOut << "Elapsed for the longest move: " << longestMoveElapsed.count() << std::endl;
+                previousResults.emplace_back(longestMoveElapsed);
+
+
+                //We have enough data to predict next move time
+
+                auto projectedNextTime = predictTime(previousResults[previousResults.size() - 2], previousResults[previousResults.size() - 1], boardList.size());
+                if (projectedNextTime > (timeTargetMax - duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted)))
+                {
+                    debugOut << "We wouldn't get a result in required time" << std::endl;
+                    goto returnResult;
+                }
+                else
+                {
+                    debugOut << "The best move is not clear yet, taking extra time to search deeper" << std::endl;
+                }
+
+
+                if (options.Verbosity >= 2)
+                {
+                    out << "info depth " << (unsigned)fullDepth;
+
+                    if (i != fullDepth)
+                        out << " seldepth " << (unsigned)i;
+
+                    out << nl << std::flush;
+                }
+
+
+                uciGoM.unlock();//Allow interruption in the middle of a calculation
+                findBestOnSameLevel(boardList, i);
+                uciGoM.lock();
+
+                bestPosFound = boardList.front().firstMoveNotation;
+
+                if (duration_t(std::chrono::high_resolution_clock::now() - timeGlobalStarted) >= timeTargetMax)//Emergency stop if we depleted time
+                {
+                    debugOut << "Emergency stop!" << std::endl;
+                    goto returnResult;
+                }
+
+                if (round(abs(boardList.front().bestFoundValue) / matePrice) > 0)
+                {
+                    debugOut << "Mate possibility, no need to search further" << std::endl;
+                    goto returnResult;
+                }
+
+
+
+
+                centiPawnBreakingPoint /= 2;
+            }
+        }
     }
 
 
-    out << "bestmove " << bestPosFound.firstMoveNotation.data() << nl << std::flush;
+    returnResult:
+    out << "bestmove " << bestPosFound << nl << std::flush;
 
     if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
     {
@@ -2516,7 +2639,7 @@ int uci(std::istream& in, std::ostream& output)
                 options.Verbosity = 7;
 #else
                 options.MultiPV = 1;
-                options.Threads = std::max(std::thread::hardware_concurrency() / 2, 1u);
+                options.Threads = std::thread::hardware_concurrency();// std::max(std::thread::hardware_concurrency() / 2, 1u);
                 options.Verbosity = 3;
 #endif
             }
@@ -2637,7 +2760,7 @@ void benchmark(i8 depth, GameState board)
 
     //std::string_view move = result.firstMoveNotation.data();
     //executeMove(board, move);
-    out << result.firstMoveNotation.data() << std::endl;
+    out << result.firstMoveNotation.c_str() << std::endl;
 
     out << "cp: " << result.bestFoundValue << std::endl;//<<"Total found score "<<result.second+result.first.balance()<<endl;
 
