@@ -10,7 +10,7 @@ project ("KlaraDestroyer")
 # Přidejte zdrojový kód ke spustitelnému souboru tohoto projektu.
 add_executable (KlaraDestroyer "KlaraDestroyer.h" "static_vector.h" "main.cpp" "fixed_string")
 
-set_target_properties(KlaraDestroyer PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/GL>;$<$<CONFIG:Release>:/arch:AVX2>;$<$<CONFIG:Release>:/fp:fast>")
+set_target_properties(KlaraDestroyer PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/GL>;$<$<CONFIG:Release>:/arch:AVX512>;$<$<CONFIG:Release>:/fp:fast>")
 set_target_properties(KlaraDestroyer PROPERTIES LINK_FLAGS_RELEASE "/LTCG")
 
 
