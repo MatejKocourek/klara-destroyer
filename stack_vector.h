@@ -6,7 +6,7 @@
 
 
 template <typename T, size_t N>
-class static_vector
+class stack_vector
 {
 private:
 	std::aligned_storage_t<sizeof(T)* N, alignof(T)> _buffer;
@@ -15,7 +15,7 @@ private:
 	/// <summary>
 	/// Fill this vector from another vector. Number of elements that should be copied/moved must be >= _size and <= _capacity.
 	/// </summary>
-	void fillFromAnother(static_vector&& source)
+	void fillFromAnother(stack_vector&& source)
 	{
 		//Reassigning new elements to already existing elements in current vector (reusing allocated objects without destroying them).
 		for (size_t i = 0; i < _size; i++)
@@ -24,7 +24,7 @@ private:
 		for (; _size < source._size; _size++)
 			new (&data()[_size]) T(std::move(source.data()[_size]));
 	}
-	void fillFromAnother(const static_vector& source)
+	void fillFromAnother(const stack_vector& source)
 	{
 		for (size_t i = 0; i < _size; i++)
 			data()[i] = source.data()[i];
@@ -45,9 +45,9 @@ private:
 
 
 public:
-	static_vector() : _size(0) {}
+	stack_vector() : _size(0) {}
 
-	static_vector(const static_vector& source) : _size(0)
+	stack_vector(const stack_vector& source) : _size(0)
 	{
 		try
 		{
@@ -60,20 +60,20 @@ public:
 		}
 	}
 
-	static_vector(static_vector&& source) : _size(0)
+	stack_vector(stack_vector&& source) : _size(0)
 	{
 		fillFromAnother(std::move(source));
 		source.clear();
 	}
 
-	static_vector(size_t count, const T& value) : _size(0)
+	stack_vector(size_t count, const T& value) : _size(0)
 	{
 		for (size_t i = 0; i < count; ++i)
 		{
 			push_back(value);
 		}
 	}
-	static_vector(size_t count) : _size(0)
+	stack_vector(size_t count) : _size(0)
 	{
 		for (size_t i = 0; i < count; ++i)
 		{
@@ -81,7 +81,7 @@ public:
 		}
 	}
 
-	static_vector(std::initializer_list<T> ilist) : _size(0)
+	stack_vector(std::initializer_list<T> ilist) : _size(0)
 	{
 		for (auto& i : ilist)
 		{
@@ -89,7 +89,7 @@ public:
 		}
 	}
 
-	static_vector& operator=(std::initializer_list<T> ilist)
+	stack_vector& operator=(std::initializer_list<T> ilist)
 	{
 		clear();
 		for (auto& i : ilist)
@@ -98,7 +98,7 @@ public:
 		}
 	}
 
-	static_vector& operator=(const static_vector& source) {
+	stack_vector& operator=(const stack_vector& source) {
 		if (this != &source) [[likely]]
 		{
 			fillFromAnother(source);
@@ -107,7 +107,7 @@ public:
 	}
 
 
-	static_vector& operator=(static_vector&& source)
+	stack_vector& operator=(stack_vector&& source)
 	{
 		if (this != &source) [[likely]]
 		{
@@ -117,7 +117,7 @@ public:
 		return *this;
 	}
 
-	~static_vector() {
+	~stack_vector() {
 		clearMem();
 	}
 
