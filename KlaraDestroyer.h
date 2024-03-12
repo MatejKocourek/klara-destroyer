@@ -1892,7 +1892,7 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
     out
         << "info "
         << "depth " << (unsigned)fullDepth << ' ';
-    if (depth != fullDepth)
+    if (depth != fullDepth) [[unlikely]]
         out << "seldepth " << depth << ' ';
     out
         << "time "  << (size_t)round(elapsedTotal.count()) << ' '
@@ -2006,7 +2006,7 @@ stack_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSid
         for (size_t i = res.size() - 1; i != 0; --i)
             printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[i], i + 1, false, bestForWhichSide);
     }
-    if (options.Verbosity >= 2)
+    if (options.Verbosity >= 1)
     {
         printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[0], 1, false, bestForWhichSide);
     }
