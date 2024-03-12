@@ -1812,7 +1812,8 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
 std::mutex m_workers;
 std::condition_variable cv_workers;
 std::atomic<bool> workToDo = false;
-std::optional<std::latch> allDone;
+std::array<std::optional<std::latch>,2> allDone;
+std::atomic<uint8_t> latchIdGlobal = 0;
 
 stack_vector<std::thread, maxMoves> threadWorkers;
 
@@ -1820,25 +1821,29 @@ bool threadRestartWanted = false;
 
 void threadWorker(size_t threadId)
 {
+    uint8_t latchId = 1;
     while (true)
     {
-        //debugOut << "worker started" << std::endl;
+       // debugOut << "thread " << threadId<<" ready for more work" << std::endl;
         {
             //Wait until next work is ready
             std::unique_lock lk(m_workers);
-            cv_workers.wait(lk, [] { return workToDo.load(); });
+            cv_workers.wait(lk, [latchId] { return workToDo.load() && ((latchIdGlobal == latchId)||threadRestartWanted); });
         }
-        //debugOut << "worker notified" << std::endl;
+        //debugOut << "thread " << threadId <<" notified" << std::endl;
         if (threadRestartWanted) [[unlikely]]//For changing the amount of workers
             break;
         workerFromQ(threadId);//Do the actual work
-        //debugOut << "arrived and waiting" << std::endl;
-        allDone->arrive_and_wait();//Signal that this worker is done and wait until all of them are.
-        workToDo = false;
+        //debugOut << "thread " << threadId << " arrived and waiting" << std::endl;
+        allDone[latchId]->arrive_and_wait();//Signal that this worker is done and wait until all of them are.
+        //workToDo = false;
+        latchId = (latchId + 1) % allDone.size();
+
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
-void threadRestart()
+void threadRestart(size_t threadsNewCount)
 {
     threadRestartWanted = true;
     workToDo = true;
@@ -1852,7 +1857,7 @@ void threadRestart()
 
     threadWorkers.clear();
 
-    for (size_t i = 1; i < options.Threads; ++i)
+    for (size_t i = 1; i < threadsNewCount; ++i)
         threadWorkers.emplace_back(threadWorker, i);
 }
 
@@ -2045,7 +2050,11 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
         //if(options.MultiPV<=1)
         //    evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
 
-        allDone.emplace(options.Threads - 1);
+        //static uint8_t latchId = 0;
+
+        latchIdGlobal = (latchIdGlobal + 1) % allDone.size();
+
+        allDone[latchIdGlobal].emplace(options.Threads - 1);
         workToDo = true;
         cv_workers.notify_all();
 
@@ -2054,7 +2063,8 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
 
         workerFromQ(0);//Do some work on this thread
 
-        allDone->wait();//Wait for the workers to finish
+        allDone[latchIdGlobal]->wait();//Wait for the workers to finish
+        workToDo = false;
 
         q.clear();
         //transpositions.clear();
@@ -2664,7 +2674,8 @@ int uci(std::istream& in, std::ostream& output)
         if (!in.good()) [[unlikely]]
         {
             debugOut << "End of input stream, rude! End the uci session with 'quit' in a controlled way." << std::endl;
-            return -1;
+            threadRestart(0);
+            return 0;
         }
             
         std::string_view commandView(command);
@@ -2686,7 +2697,7 @@ int uci(std::istream& in, std::ostream& output)
             }
 
             if (threadWorkers.size() != options.Threads)
-                threadRestart();
+                threadRestart(options.Threads);
 
             out << "id name Klara Destroyer" << nl
                 << "id author Matej Kocourek" << nl
@@ -2707,6 +2718,7 @@ int uci(std::istream& in, std::ostream& output)
         }
         else if (commandFirst == "quit")
         {
+            threadRestart(0);
             debugOut << "Bye!" << std::endl;
             return 0;
         }
@@ -2737,7 +2749,7 @@ int uci(std::istream& in, std::ostream& output)
                 options.Threads = std::atoll(optionValue.data());
                 debugOut << "Setting Threads to " << options.Threads << std::endl;
                 if (threadWorkers.size() != options.Threads)
-                    threadRestart();
+                    threadRestart(options.Threads);
             }
             else if (optionName == "Verbosity")
             {
