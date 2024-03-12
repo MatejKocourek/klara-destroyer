@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <latch>
 #include "stack_vector.h"
 #include "stack_string.h"
 
@@ -1789,14 +1790,14 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
     while (true)
     {
         if (optimalTimeDepleted || criticalTimeDepleted) [[unlikely]]
-            return;
+            break;
         size_t localPos = qPos.fetch_add(1ull, std::memory_order_relaxed);
         if (localPos >= q.size()) [[unlikely]]//Stopper
-            {
-                --qPos;
-                return;
-            }
-            
+        {
+            --qPos;
+            break;
+        }
+
         auto& tmp = *q[localPos];
 
         AssertAssume(tmp.board.playerOnMove == onMoveW);
@@ -1806,6 +1807,53 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
         //if (criticalTimeDepleted) [[unlikely]]
         //    --qPos;
     }
+}
+
+std::mutex m_workers;
+std::condition_variable cv_workers;
+std::atomic<bool> workToDo = false;
+std::optional<std::latch> allDone;
+
+stack_vector<std::thread, maxMoves> threadWorkers;
+
+bool threadRestartWanted = false;
+
+void threadWorker(size_t threadId)
+{
+    while (true)
+    {
+        //debugOut << "worker started" << std::endl;
+        {
+            //Wait until next work is ready
+            std::unique_lock lk(m_workers);
+            cv_workers.wait(lk, [] { return workToDo.load(); });
+        }
+        //debugOut << "worker notified" << std::endl;
+        if (threadRestartWanted) [[unlikely]]//For changing the amount of workers
+            break;
+        workerFromQ(threadId);//Do the actual work
+        //debugOut << "arrived and waiting" << std::endl;
+        allDone->arrive_and_wait();//Signal that this worker is done and wait until all of them are.
+        workToDo = false;
+    }
+}
+
+void threadRestart()
+{
+    threadRestartWanted = true;
+    workToDo = true;
+    cv_workers.notify_all();
+
+    for (auto& i : threadWorkers)
+        i.join();
+
+    threadRestartWanted = false;
+    workToDo = false;
+
+    threadWorkers.clear();
+
+    for (size_t i = 1; i < options.Threads; ++i)
+        threadWorkers.emplace_back(threadWorker, i);
 }
 
 bool cutoffBadMoves(stack_vector<Variation,maxMoves>& boards, float cutoffPointRelative)
@@ -1997,19 +2045,16 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
         //if(options.MultiPV<=1)
         //    evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
 
-        stack_vector<std::thread, maxMoves> threads;
+        allDone.emplace(options.Threads - 1);
+        workToDo = true;
+        cv_workers.notify_all();
 
-        size_t optimalThreadCount = std::min(boards.size(), options.Threads);
 
-        //threads.reserve(optimalThreadCount - 1);//Not needed, safety check
-
-        for (size_t i = 1; i < optimalThreadCount; ++i)
-            threads.emplace_back(workerFromQ, i);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
         workerFromQ(0);//Do some work on this thread
 
-        for (auto& i : threads)
-            i.join();
+        allDone->wait();//Wait for the workers to finish
 
         q.clear();
         //transpositions.clear();
@@ -2020,7 +2065,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
             debugOut << "Not enough time to search all moves. Only managed to fully go through " << qPos << " out of " << boards.size() << std::endl;
         }
 
-        if ((optimalTimeDepleted || criticalTimeDepleted) && (qPos <= threads.size()))//Not a single board came through
+        if ((optimalTimeDepleted || criticalTimeDepleted) && (qPos <= options.Threads-1))//Not a single board came through
             return duration_t(std::numeric_limits<double>::infinity());
 
         for (const auto& i : boards)
@@ -2367,12 +2412,14 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                 //size_t availableMoveCount = boardList.size();
 
                 uciGoM.unlock();//Allow interruption in the middle of a calculation
-                //auto startThisLayer = std::chrono::high_resolution_clock::now();
+                auto startThisLayer = std::chrono::high_resolution_clock::now();
                 duration_t firstMoveElapsed = findBestOnSameLevel(boardList, i);
-                //auto elapsedThisLayer = duration_t(std::chrono::high_resolution_clock::now() - startThisLayer);
+                auto elapsedThisLayer = duration_t(std::chrono::high_resolution_clock::now() - startThisLayer);
                 uciGoM.lock();
 
-                //debugOut << "Elapsed for this layer: " << elapsedThisLayer.count() << std::endl;
+
+
+                debugOut << "Elapsed for this layer: " << elapsedThisLayer.count() << std::endl;
                 //previousResultsFullTime.emplace_back(elapsedThisLayer);
 
                 bestPosFound = boardList.front().firstMoveNotation;
@@ -2637,6 +2684,10 @@ int uci(std::istream& in, std::ostream& output)
                 options.Verbosity = 3;
 #endif
             }
+
+            if (threadWorkers.size() != options.Threads)
+                threadRestart();
+
             out << "id name Klara Destroyer" << nl
                 << "id author Matej Kocourek" << nl
                 << "option name MultiPV type spin min 1 max 218 default " << options.MultiPV << nl
@@ -2685,6 +2736,8 @@ int uci(std::istream& in, std::ostream& output)
                 //debugOut << "Option value was: " << optionValue << std::endl;
                 options.Threads = std::atoll(optionValue.data());
                 debugOut << "Setting Threads to " << options.Threads << std::endl;
+                if (threadWorkers.size() != options.Threads)
+                    threadRestart();
             }
             else if (optionName == "Verbosity")
             {

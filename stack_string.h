@@ -5,7 +5,6 @@
 
 template <size_t _capacity>
 class stack_string {
-	std::array<char, _capacity> _data;
 	using fitting_t =
 		std::conditional_t<_capacity <= std::numeric_limits<uint8_t>::max(), uint8_t,
 		std::conditional_t<_capacity <= std::numeric_limits<uint16_t>::max(), uint16_t,
@@ -13,6 +12,7 @@ class stack_string {
 		uint64_t>>>;
 
 	fitting_t _size;
+	std::array<char, _capacity> _data;
 public:
 
 
