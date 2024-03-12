@@ -118,6 +118,10 @@ static std::atomic<float> alphaOrBeta;
 static constexpr i8 depthToStopOrderingPieces = 3;
 static constexpr i8 depthToStopOrderingMoves = 3;
 
+// Relax castling restrictions after certain depth. 0=full rules check only for next engines move, 1=also full check enemy move, 2=also full check engines second move, etc.
+// Set to at least 1 (to avoid obvious checkmate possibility)
+static constexpr i8 castlingMaxDepth = 2; 
+
 template<typename T>
 inline void update_max(std::atomic<T>& atom, const T& val)
 {
@@ -1322,9 +1326,7 @@ struct Variation {
 
         //assert(variationDepth == depthW);
 
-#ifdef RELAX_CASTLING_PREDICTIONS
-        if (depth+1<= variationDepth) [[unlikely]]//To optimize time, we do not check whether the path is attacked, unless the move is immediate. May produce bad predictions, but only for small number of cases.
-#endif
+        if (variationDepth - depth <= castlingMaxDepth) [[unlikely]]//To optimize time, we do not check whether the path is attacked, unless the move is immediate. May produce bad predictions, but only for small number of cases.
         {
             for (i8 i = kingColumn; i != newKingColumn; i -= sign)//Do not check the last field (where the king should be placed), it will be checked later anyway
             {
