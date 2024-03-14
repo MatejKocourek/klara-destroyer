@@ -9,8 +9,13 @@ template <typename T, size_t N>
 class stack_vector
 {
 private:
+	using fitting_t =
+		std::conditional_t<N <= std::numeric_limits<uint8_t>::max(), uint8_t,
+		std::conditional_t<N <= std::numeric_limits<uint16_t>::max(), uint16_t,
+		std::conditional_t<N <= std::numeric_limits<uint32_t>::max(), uint32_t,
+		uint64_t>>>;
 	std::aligned_storage_t<sizeof(T)* N, alignof(T)> _buffer;
-	size_t _size;
+	fitting_t _size;
 
 	/// <summary>
 	/// Fill this vector from another vector. Number of elements that should be copied/moved must be >= _size and <= _capacity.
