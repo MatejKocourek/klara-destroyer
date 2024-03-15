@@ -1806,6 +1806,7 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
 
         //size_t localSolvedPos = solvedPos.fetch_add(1ull, std::memory_order_relaxed);
 
+        if (!criticalTimeDepleted) [[likely]]
         {
             std::unique_lock lk(m_solved);
             solvedMoves->push_back(std::move(res));
@@ -2086,18 +2087,28 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
         //q.clear();
         //transpositions.clear();
 
-
+        if (resultBoards.size() == availableMoves)
+        {
+            fullDepth = depth + 1;
+        }
         if (resultBoards.size() != boards.size())
         {
             debugOut << "Not enough time to search all moves. Only managed to fully go through " << resultBoards.size() << " out of " << boards.size() << std::endl;
-        }
-        if (resultBoards.size() == availableMoves)
-        {
-            fullDepth = depth+1;
-        }
 
-        if (resultBoards.empty())//Not a single board came through
+            const auto& oldBestMove = boards[0];
+            for (const auto& i : resultBoards)
+            {
+                if (oldBestMove.firstMoveNotation == i.firstMoveNotation)
+                {
+                    debugOut << "Time ran out, but the engine at least managed to include the supposed best move in the results. Returning results."<<std::endl;
+                    goto bestMoveFound;
+                }
+            }
+            debugOut << "Time ran out and the engine did not manage to include the supposed best move. Cancelling the results." << std::endl;
             return duration_t(std::numeric_limits<double>::infinity());
+
+        }
+    bestMoveFound:
         
 
         for (const auto& i : resultBoards)
