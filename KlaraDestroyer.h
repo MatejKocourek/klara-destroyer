@@ -20,6 +20,7 @@
 #include <iostream>
 #include <sstream>
 #include <latch>
+#include <barrier>
 #include "stack_vector.h"
 #include "stack_string.h"
 
@@ -1817,8 +1818,10 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
 std::mutex m_workers;
 std::condition_variable cv_workers;
 std::atomic<bool> workToDo = false;
-std::array<std::optional<std::latch>,2> allDone;
-std::atomic<uint8_t> latchIdGlobal = 0;
+void on_completion() noexcept {
+    workToDo = false;
+}
+std::optional<std::barrier<void(*)() noexcept>> barrier;
 
 stack_vector<std::thread, maxMoves> threadWorkers;
 
@@ -1826,47 +1829,46 @@ bool threadRestartWanted = false;
 
 void threadWorker(size_t threadId)
 {
-    uint8_t latchId = 1;
     while (true)
     {
         //debugOut << "thread " << threadId<<" ready for more work" << std::endl;
         {
             //Wait until next work is ready
             std::unique_lock lk(m_workers);
-            cv_workers.wait(lk, [latchId] { return workToDo.load() && ((latchIdGlobal == latchId)||threadRestartWanted); });
+            cv_workers.wait(lk, [] { return workToDo.load(); });
         }
         //debugOut << "thread " << threadId <<" notified" << std::endl;
         if (threadRestartWanted) [[unlikely]]//For changing the amount of workers
             break;
         workerFromQ(threadId);//Do the actual work
         //debugOut << "thread " << threadId << " arrived and waiting" << std::endl;
-        allDone[latchId]->count_down();//Signal that this worker is done //and wait until all of them are.
-        //workToDo = false;
-        latchId = (latchId + 1) % allDone.size();
-
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        //Signal that this worker is done and wait until all of them are.
+        barrier->arrive_and_wait();
     }
 }
 
 void threadRestart(size_t threadsNewCount)
 {
-    threadRestartWanted = true;
-    workToDo = true;
-    cv_workers.notify_all();
+    if (!threadWorkers.empty())
+    {
+        threadRestartWanted = true;
+        workToDo = true;
+        cv_workers.notify_all();
 
-    for (auto& i : threadWorkers)
-        i.join();
+        for (auto& i : threadWorkers)
+            i.join();
+
+        threadWorkers.clear();
+    }
 
     threadRestartWanted = false;
     workToDo = false;
-    latchIdGlobal = 0;
+    //latchIdGlobal = 0;
 
-    threadWorkers.clear();
+    barrier.emplace(threadsNewCount, on_completion);
 
     for (size_t i = 1; i < threadsNewCount; ++i)
         threadWorkers.emplace_back(threadWorker, i);
-
-
 }
 
 bool cutoffBadMoves(stack_vector<Variation,maxMoves>& boards, float cutoffPointRelative)
@@ -2071,21 +2073,15 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
         //if(options.MultiPV<=1)
         //    evaluateGameMoveFromQ(qPos++, depthW);//It is usefull to run first pass on single core at full speed to set up alpha/Beta
 
-        //static uint8_t latchId = 0;
 
-        latchIdGlobal = (latchIdGlobal + 1) % allDone.size();
-
-        allDone[latchIdGlobal].emplace(options.Threads - 1);
         workToDo = true;
         cv_workers.notify_all();
 
 
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        workerFromQ(0);//Do work on this thread
 
-        workerFromQ(0);//Do some work on this thread
+        barrier->arrive_and_wait();//Wait for the workers to finish
 
-        allDone[latchIdGlobal]->wait();//Wait for the workers to finish
-        workToDo = false;
 
         //q.clear();
         //transpositions.clear();
