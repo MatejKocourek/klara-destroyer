@@ -2417,6 +2417,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
     std::atomic<uint8_t> timeoutThreadsWaiting = 0;
     std::thread criticalTimeout;
     std::thread optimalTimeout;
+    std::atomic<bool> threadsEndWanted = false;
 
 
     auto boardList = generateMoves(board,board.playerOnMove, playedPositions);
@@ -2484,29 +2485,57 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
         if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
         {
-            criticalTimeout = std::thread([&cvTimeout, &mTimeoutCritical, timeTargetMax, &timeoutThreadsWaiting]()
+            criticalTimeout = std::thread([&]()
                 {
                     std::unique_lock<std::mutex> l(mTimeoutCritical);
-                    if (cvTimeout.wait_for(l, timeTargetMax - duration_t(5)) == std::cv_status::timeout)
+                    while (true)
                     {
-                        criticalTimeDepleted = true;
-                        debugOut << std::endl << std::endl << "Critical timeout! Terminating running computations ASAP" << std::endl << std::endl << std::endl;
+                        auto res = cvTimeout.wait_for(l, timeTargetMax - duration_t(5));
+                        switch (res)
+                        {
+                        case std::cv_status::no_timeout:[[likely]]
+                            if (threadsEndWanted)[[likely]]
+                                goto end;
+                            break;//spurious wakeup
+                        case std::cv_status::timeout:
+                            criticalTimeDepleted = true;
+                            debugOut << std::endl << std::endl << "Critical timeout! Terminating running computations ASAP" << std::endl << std::endl << std::endl;
+                            goto end;
+                            break;
+                        default:
+                            std::unreachable();
+                        }
                     }
-                    timeoutThreadsWaiting--;
+                    end:
+                    --timeoutThreadsWaiting;
                 });
             //threadTimeout.detach();
         }
         if (timeTargetOptimal != duration_t(std::numeric_limits<double>::infinity()))
         {
-            optimalTimeout = std::thread([&cvTimeout, &mTimeoutOptimal, timeTargetOptimal, &timeoutThreadsWaiting]()
+            optimalTimeout = std::thread([&]()
                 {
                     std::unique_lock<std::mutex> l(mTimeoutOptimal);
-                    if (cvTimeout.wait_for(l, timeTargetOptimal) == std::cv_status::timeout)
+                    while (true)
                     {
-                        optimalTimeDepleted = true;
-                        debugOut << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
+                        auto res = cvTimeout.wait_for(l, timeTargetOptimal);
+                        switch (res)
+                        {
+                        case std::cv_status::no_timeout:[[likely]]
+                            if (threadsEndWanted) [[likely]]
+                                goto end;
+                                break;//spurious wakeup
+                        case std::cv_status::timeout:
+                            optimalTimeDepleted = true;
+                            debugOut << std::endl << std::endl << "Optimal timeout! Not allowing any more variations, but finishing what already started." << std::endl << std::endl << std::endl;
+                            goto end;
+                            break;
+                        default:
+                            std::unreachable();
+                        }
                     }
-                    timeoutThreadsWaiting--;
+                end:
+                    --timeoutThreadsWaiting;
                 });
             //threadTimeout.detach();
         }
@@ -2668,6 +2697,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
     if (timeTargetMax != duration_t(std::numeric_limits<double>::infinity()))
     {
+        threadsEndWanted = true;
         do
         {
             cvTimeout.notify_all();//Cancel the timeout timer
