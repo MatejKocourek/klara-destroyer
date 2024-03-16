@@ -72,16 +72,16 @@ static constexpr size_t maxMoves = 218;
 #define MOVE_PIECE_CAPTURE_ONLY std::greater<float>()
 #define MOVE_PIECE_FREE_CAPTURE std::greater_equal<float>()
 
-enum PlayerSide : i8
+enum class PlayerSide : i8
 {
     WHITE = 1,
     BLACK = -1,
     NONE = 0
 };
 
-enum PieceGeneric : i8
+enum class PieceGeneric : i8
 {
-    NothingGeneric = 0,
+    Nothing = 0,
     Pawn = 1,//0x01,
     Knight = 2,//0x02,
     Bishop = 3,//0x03,
@@ -90,7 +90,7 @@ enum PieceGeneric : i8
     King = 6,//0x06,
 };
 
-enum Piece : i8
+enum class Piece : i8
 {
     Nothing = 0,
     PawnWhite = 1,//0x01,
@@ -106,6 +106,82 @@ enum Piece : i8
     QueenBlack = -5,//0x85,
     KingBlack = -6,//0x86
 };
+
+constexpr float operator * (float lhs, PlayerSide rhs) noexcept
+{
+    return lhs * static_cast<i8>(rhs);
+}
+constexpr double operator * (double lhs, PlayerSide rhs) noexcept
+{
+    return lhs * static_cast<i8>(rhs);
+}
+constexpr int8_t operator * (int8_t lhs, PlayerSide rhs) noexcept
+{
+    return lhs * static_cast<i8>(rhs);
+}
+constexpr int16_t operator * (int16_t lhs, PlayerSide rhs) noexcept
+{
+    return lhs * static_cast<i8>(rhs);
+}
+constexpr int32_t operator * (int32_t lhs, PlayerSide rhs) noexcept
+{
+    return lhs * static_cast<i8>(rhs);
+}
+constexpr int64_t operator * (int64_t lhs, PlayerSide rhs) noexcept
+{
+    return lhs * static_cast<i8>(rhs);
+}
+
+constexpr inline PlayerSide operator - (PlayerSide side) noexcept
+{
+    AssertAssume(static_cast<i8>(side) == 1 || static_cast<i8>(side) == -1);
+    return static_cast<PlayerSide>(-static_cast<i8>(side));
+}
+constexpr inline PlayerSide oppositeSide(PlayerSide side) noexcept
+{
+    return -side;
+}
+
+constexpr inline i8 index(PlayerSide side) noexcept
+{
+    AssertAssume(static_cast<i8>(side) == 1 || static_cast<i8>(side) == -1);
+    return (static_cast<i8>(side) + static_cast<i8>(1)) / static_cast<i8>(2);
+}
+
+constexpr inline i8 playerDirection(PlayerSide side) noexcept
+{
+    AssertAssume(static_cast<i8>(side) == 1 || static_cast<i8>(side) == -1);
+    return static_cast<i8>(side);
+}
+
+
+constexpr PlayerSide pieceColor(Piece p)
+{
+    return static_cast<PlayerSide>(((static_cast<int8_t>(p) & static_cast <int8_t>(0x80)) >> 6) | 0x01);
+}
+constexpr PieceGeneric toGenericPiece(Piece p)
+{
+    return (PieceGeneric)((static_cast<i8>(p) >= 0) ? static_cast<i8>(p) : -static_cast<i8>(p));
+    //return static_cast<PieceGeneric>(std::abs(p));
+}
+constexpr Piece operator * (Piece lhs, PlayerSide rhs) noexcept
+{
+    return static_cast<Piece>(static_cast<i8>(lhs) * static_cast<i8>(rhs));
+}
+constexpr Piece operator * (PieceGeneric lhs, PlayerSide rhs) noexcept
+{
+    return static_cast<Piece>(static_cast<i8>(lhs) * static_cast<i8>(rhs));
+}
+
+constexpr Piece fromGenericPiece(PieceGeneric p, PlayerSide side)
+{
+    return static_cast<Piece>(p * side);
+}
+constexpr inline Piece operator - (Piece piece) noexcept
+{
+    return static_cast<Piece>(-static_cast<i8>(piece));
+}
+
 
 static std::atomic<bool> criticalTimeDepleted;
 static std::atomic<bool> optimalTimeDepleted;
@@ -145,11 +221,7 @@ struct Options {
 
 bool firstLevelPruning = true;
 
-constexpr inline PlayerSide oppositeSide(PlayerSide side) noexcept
-{
-    AssertAssume(side==1||side==-1);
-    return (PlayerSide)(-(i8)side);
-}
+
 constexpr i8 oneColumn = 1;
 constexpr inline i8 column(i8 indexOnBoard) noexcept
 {
@@ -188,31 +260,31 @@ constexpr wchar_t symbolW(Piece p)
 {
     switch (p)
     {
-    case Nothing:
+    case Piece::Nothing:
         return L' ';
-    case PawnWhite:
+    case Piece::PawnWhite:
         return L'♙';
-    case KnightWhite:
+    case Piece::KnightWhite:
         return L'♘';
-    case BishopWhite:
+    case Piece::BishopWhite:
         return  L'♗';
-    case RookWhite:
+    case Piece::RookWhite:
         return L'♖';
-    case QueenWhite:
+    case Piece::QueenWhite:
         return L'♕';
-    case KingWhite:
+    case Piece::KingWhite:
         return L'♔';
-    case PawnBlack:
+    case Piece::PawnBlack:
         return L'♟';
-    case KnightBlack:
+    case Piece::KnightBlack:
         return L'♞';
-    case BishopBlack:
+    case Piece::BishopBlack:
         return L'♝';
-    case RookBlack:
+    case Piece::RookBlack:
         return L'♜';
-    case QueenBlack:
+    case Piece::QueenBlack:
         return L'♛';
-    case KingBlack:
+    case Piece::KingBlack:
         return L'♚';
     default:
         std::unreachable();
@@ -223,31 +295,31 @@ constexpr char symbolA(Piece p)
 {
     switch (p)
     {
-    case Nothing:
+    case Piece::Nothing:
         return ' ';
-    case PawnWhite:
+    case Piece::PawnWhite:
         return 'p';
-    case KnightWhite:
+    case Piece::KnightWhite:
         return 'n';
-    case BishopWhite:
+    case Piece::BishopWhite:
         return 'b';
-    case RookWhite:
+    case Piece::RookWhite:
         return 'r';
-    case QueenWhite:
+    case Piece::QueenWhite:
         return 'q';
-    case KingWhite:
+    case Piece::KingWhite:
         return 'k';
-    case PawnBlack:
+    case Piece::PawnBlack:
         return 'P';
-    case KnightBlack:
+    case Piece::KnightBlack:
         return 'N';
-    case BishopBlack:
+    case Piece::BishopBlack:
         return 'B';
-    case RookBlack:
+    case Piece::RookBlack:
         return 'R';
-    case QueenBlack:
+    case Piece::QueenBlack:
         return 'Q';
-    case KingBlack:
+    case Piece::KingBlack:
         return 'K';
     default:
         std::unreachable();
@@ -257,19 +329,19 @@ constexpr char symbolA(PieceGeneric p)
 {
     switch (p)
     {
-    case NothingGeneric:
+    case PieceGeneric::Nothing:
         return ' ';
-    case Pawn:
+    case PieceGeneric::Pawn:
         return 'p';
-    case Knight:
+    case PieceGeneric::Knight:
         return 'n';
-    case Bishop:
+    case PieceGeneric::Bishop:
         return 'b';
-    case Rook:
+    case PieceGeneric::Rook:
         return 'r';
-    case Queen:
+    case PieceGeneric::Queen:
         return 'q';
-    case King:
+    case PieceGeneric::King:
         return 'k';
     default:
         std::unreachable();
@@ -281,7 +353,7 @@ constexpr PieceGeneric fromGenericSymbol(char a)
     switch (a)
     {
     case ' ':
-        return PieceGeneric::NothingGeneric;
+        return PieceGeneric::Nothing;
     case 'p':
         return PieceGeneric::Pawn;
     case 'n':
@@ -299,19 +371,6 @@ constexpr PieceGeneric fromGenericSymbol(char a)
     }
 }
 
-constexpr PlayerSide pieceColor(Piece p)
-{
-    return static_cast<PlayerSide>(((static_cast<int8_t>(p) & static_cast <int8_t>(0x80)) >> 6) | 0x01);
-}
-constexpr PieceGeneric toGenericPiece(Piece p)
-{
-    return (PieceGeneric)((p >= 0) ? p : -p);
-    //return static_cast<PieceGeneric>(std::abs(p));
-}
-constexpr Piece fromGenericPiece(PieceGeneric p, PlayerSide side)
-{
-    return (Piece)(p*side);
-}
 
 
 constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
@@ -319,9 +378,9 @@ constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
     //AssertAssume(column < 8 && row < 8 && column >= 0 && row >= 0);
     switch (p)
     {
-    case Nothing:
+    case PieceGeneric::Nothing:
         return 0;
-    case Pawn:
+    case PieceGeneric::Pawn:
     {
         constexpr std::array<float, 64> arr = {
 0,   0,   0,   0,   0,   0,  0,   0,
@@ -335,7 +394,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
         };
         return arr[pieceIndex];
     }
-    case Knight:
+    case PieceGeneric::Knight:
     {
         constexpr std::array<float, 64> arr = {
 -167, -89, -34, -49,  61, -97, -15, -107,
@@ -349,7 +408,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
         };
         return arr[pieceIndex];
     }
-    case Bishop:
+    case PieceGeneric::Bishop:
     {
         constexpr std::array<float, 64> arr = {
 -29,   4, -82, -37, -25, -42,   7,  -8,
@@ -363,7 +422,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
         };
         return arr[pieceIndex];
     }
-    case Rook:
+    case PieceGeneric::Rook:
     {
         constexpr std::array<float, 64> arr = {
 32,  42,  32,  51, 63,  9,  31,  43,
@@ -377,7 +436,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
         };
         return arr[pieceIndex];
     }
-    case Queen:
+    case PieceGeneric::Queen:
     {
         constexpr std::array<float, 64> arr = {
 -28,   0,  29,  12,  59,  44,  43,  45,
@@ -391,7 +450,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
         };
         return arr[pieceIndex];
     }
-    case King:
+    case PieceGeneric::King:
     {
         constexpr std::array<float, 64> arr = {
 -65,  23,  16, -15, -56, -34,   2,  13,
@@ -415,7 +474,7 @@ constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
 //}
 constexpr float priceAdjustmentPov(Piece p, i8 column, i8 row)
 {
-    if (p < 0)//case(PlayerSide::BLACK):
+    if (static_cast<i8>(p) < 0)//case(PlayerSide::BLACK):
     {
         return priceAdjustment((PieceGeneric)(-p), toIndex(column, row));
     }
@@ -429,19 +488,19 @@ constexpr float pricePiece(PieceGeneric p)
 {
     switch (p)
     {
-    case Nothing:
+    case PieceGeneric::Nothing:
         return 0;
-    case Pawn:
+    case PieceGeneric::Pawn:
         return 82;
-    case Knight:
+    case PieceGeneric::Knight:
         return 337;
-    case Bishop:
+    case PieceGeneric::Bishop:
         return 365;
-    case Rook:
+    case PieceGeneric::Rook:
         return 477;
-    case Queen:
+    case PieceGeneric::Queen:
         return 1025;
-    case King:
+    case PieceGeneric::King:
         return 20000;
     default:
         std::unreachable();
@@ -475,9 +534,9 @@ std::wostream& printPiece(Piece p, std::wostream& os) {
 constexpr i8 promoteRow(PlayerSide s) {
     switch (s)
     {
-    case WHITE:
+    case PlayerSide::WHITE:
         return 7;
-    case BLACK:
+    case PlayerSide::BLACK:
         return 0;
     default:
         std::unreachable();
@@ -487,21 +546,21 @@ constexpr i8 promoteRow(PlayerSide s) {
 constexpr i8 initialRow(Piece p) {
     switch (p)
     {
-    case PawnWhite:
+    case Piece::PawnWhite:
         return 1;
-    case KnightWhite:
-    case BishopWhite:
-    case RookWhite:
-    case QueenWhite:
-    case KingWhite:
+    case Piece::KnightWhite:
+    case Piece::BishopWhite:
+    case Piece::RookWhite:
+    case Piece::QueenWhite:
+    case Piece::KingWhite:
         return 0;
-    case PawnBlack:
+    case Piece::PawnBlack:
         return 6;
-    case KnightBlack:
-    case BishopBlack:
-    case RookBlack:
-    case QueenBlack:
-    case KingBlack:
+    case Piece::KnightBlack:
+    case Piece::BishopBlack:
+    case Piece::RookBlack:
+    case Piece::QueenBlack:
+    case Piece::KingBlack:
         return 7;
     default:
         std::unreachable();
@@ -512,12 +571,12 @@ std::array<Piece, 4> availablePromotes(Piece p)
 {
     switch (p)
     {
-    case PawnWhite:
+    case Piece::PawnWhite:
     {
         static std::array<Piece, 4> whiteEvolveLastRow{ Piece::QueenWhite, Piece::RookWhite, Piece::BishopWhite, Piece::KnightWhite };
         return whiteEvolveLastRow;
     }
-    case PawnBlack:
+    case Piece::PawnBlack:
     {
         static std::array<Piece, 4> blackEvolveLastRow{ Piece::QueenBlack, Piece::RookBlack, Piece::BishopBlack, Piece::KnightBlack };
         return blackEvolveLastRow;
@@ -658,7 +717,7 @@ public:
         static_assert(std::is_base_of<std::ios_base, T>::value, "Must be an output stream");
         switch (pov)
         {
-        case BLACK:
+        case PlayerSide::BLACK:
         {
             for (i8 i = 0; i < 8; ++i) {
                 os << i + 1 << ' ';
@@ -671,7 +730,7 @@ public:
             }
             os << "   h g f e d c b a";
         } break;
-        case WHITE:
+        case PlayerSide::WHITE:
         {
             for (i8 i = 7; i >= 0; --i) {
                 os << i + 1 << ' ';
@@ -751,7 +810,7 @@ public:
         for (const auto& i : board)
         {
             if (i != Piece::Nothing)
-                ++counters[(pieceColor(i) + 1)/2];
+                ++counters[index(pieceColor(i))];
         }
         return std::min(counters[0], counters[1]);
     }
@@ -1027,7 +1086,7 @@ struct Variation {
     //template <bool saveToVector>
     float bestMoveScore(i8 depth, float valueSoFar, float alpha, float beta)
     {
-        AssertAssume(board.playerOnMove == 1 || board.playerOnMove == -1);
+        AssertAssume(board.playerOnMove == PlayerSide::WHITE || board.playerOnMove == PlayerSide::BLACK);
 
         //if(depth>3)
         //{
@@ -1372,11 +1431,11 @@ struct Variation {
 
             switch (piece)
             {
-            case Nothing:
+            case PieceGeneric::Nothing:
                 break;
-            case Pawn:
+            case PieceGeneric::Pawn:
             {
-                if (row + board.playerOnMove == promoteRow(board.playerOnMove)) [[unlikely]]
+                if (row + playerDirection(board.playerOnMove) == promoteRow(board.playerOnMove)) [[unlikely]]
                     {
                         const auto& availableOptions = availablePromotes(p);//evolveIntoReference(row + advanceRow());
                         for (const auto& evolveOption : availableOptions) {
@@ -1384,32 +1443,32 @@ struct Variation {
                             float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
 
                             //Capture diagonally
-                            tryPlacingPieceAt(evolveOption, column - 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-                            tryPlacingPieceAt(evolveOption, column + 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+                            tryPlacingPieceAt(evolveOption, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+                            tryPlacingPieceAt(evolveOption, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
 
                             //Go forward
-                            tryPlacingPieceAt(evolveOption, column, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
+                            tryPlacingPieceAt(evolveOption, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
                         }
                     }
                 else [[likely]]
                     {
                         //Capture diagonally
-                        tryPlacingPieceAt(p, column - 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
-                        tryPlacingPieceAt(p, column + 1, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+                        tryPlacingPieceAt(p, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+                        tryPlacingPieceAt(p, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
 
                         //Go forward
-                        bool goForwardSuccessful = tryPlacingPieceAt(p, column, row + board.playerOnMove, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+                        bool goForwardSuccessful = tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
                         if (goForwardSuccessful) [[likely]]//Field in front of the pawn is empty, can make a second step
                             {
                                 if (row == initialRow(p))//Two fields forward
                                 {
-                                    tryPlacingPieceAt(p, column, row + board.playerOnMove * 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+                                    tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove) * 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar, MOVE_PIECE_FREE_ONLY);
                                 }
                             }
                     }
 
             } break;
-            case Knight:
+            case PieceGeneric::Knight:
             {
                 tryPlacingPieceAt(p, column + 1, row + 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
                 tryPlacingPieceAt(p, column + 1, row - 2, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
@@ -1421,14 +1480,14 @@ struct Variation {
                 tryPlacingPieceAt(p, column - 2, row - 1, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar);
 
             } break;
-            case Bishop:
+            case PieceGeneric::Bishop:
             {
                 for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
                 for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
                 for (i8 i = 1; tryPlacingPieceAt(p, column - i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
                 for (i8 i = 1; tryPlacingPieceAt(p, column - i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
             } break;
-            case Rook:
+            case PieceGeneric::Rook:
             {
                 bool castleLeftBackup;
                 bool castleRightBackup;
@@ -1437,13 +1496,13 @@ struct Variation {
                 {
                     if (column == 0)
                     {
-                        bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
+                        bool& canICastleLeft = board.canCastleLeft[index(board.playerOnMove)];
                         castleLeftBackup = canICastleLeft;
                         canICastleLeft = false;
                     }
                     else if (column == 7)
                     {
-                        bool& canICastleRight = board.canCastleRight[(board.playerOnMove + 1) / 2];
+                        bool& canICastleRight = board.canCastleRight[index(board.playerOnMove)];
                         castleRightBackup = canICastleRight;
                         canICastleRight = false;
                     }
@@ -1458,17 +1517,17 @@ struct Variation {
                 {
                     if (column == 0)
                     {
-                        bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
+                        bool& canICastleLeft = board.canCastleLeft[index(board.playerOnMove)];
                         canICastleLeft = castleLeftBackup;
                     }
                     else if (column == 7)
                     {
-                        bool& canICastleRight = board.canCastleRight[(board.playerOnMove + 1) / 2];
+                        bool& canICastleRight = board.canCastleRight[index(board.playerOnMove)];
                         canICastleRight = castleRightBackup;
                     }
                 }
             } break;
-            case Queen:
+            case PieceGeneric::Queen:
             {
                 for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
                 for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
@@ -1481,10 +1540,10 @@ struct Variation {
                 for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth - 1, alpha, beta, bestValue, doNotContinue, valueSoFar); ++i);
 
             } break;
-            case King:
+            case PieceGeneric::King:
             {
-                bool& canICastleLeft = board.canCastleLeft[(board.playerOnMove + 1) / 2];
-                bool& canICastleRight = board.canCastleRight[(board.playerOnMove + 1) / 2];
+                bool& canICastleLeft = board.canCastleLeft[index(board.playerOnMove)];
+                bool& canICastleRight = board.canCastleRight[index(board.playerOnMove)];
 
 
 #ifndef CASTLING_DISABLED
@@ -1541,9 +1600,9 @@ struct Variation {
 
         switch (piece)
         {
-        case Pawn:
-        case Rook:
-        case King:
+        case PieceGeneric::Pawn:
+        case PieceGeneric::Rook:
+        case PieceGeneric::King:
             return bestMoveWithThisPieceScore(column, row, depth, alpha, beta, valueSoFar, doNotContinue);
         }
         float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
@@ -1555,13 +1614,13 @@ struct Variation {
 
         switch (piece)
         {
-        case Nothing:
+        case PieceGeneric::Nothing:
             break;
-        case Pawn:
+        case PieceGeneric::Pawn:
         {
             //TODO
         } break;
-        case Knight:
+        case PieceGeneric::Knight:
         {
             //stack_vector<std::pair<float, std::pair<i8, i8>>, 8> possibleMoves;
 
@@ -1575,7 +1634,7 @@ struct Variation {
             addMoveToList(p, column - 2, row - 1, alpha, beta, possibleMoves);
 
         } break;
-        case Bishop:
+        case PieceGeneric::Bishop:
         {
             //stack_vector<std::pair<float, std::pair<i8, i8>>, 13> possibleMoves;
 
@@ -1584,7 +1643,7 @@ struct Variation {
             for (i8 i = 1; addMoveToList(p, column - i, row + i, alpha, beta, possibleMoves); ++i);
             for (i8 i = 1; addMoveToList(p, column - i, row - i, alpha, beta, possibleMoves); ++i);
         } break;
-        case Rook:
+        case PieceGeneric::Rook:
         {
             //TODO castling how to?
 
@@ -1627,7 +1686,7 @@ struct Variation {
             //    }
             //}
         } break;
-        case Queen:
+        case PieceGeneric::Queen:
         {
             for (i8 i = 1; addMoveToList(p, column + i, row + i, alpha, beta, possibleMoves); ++i);
             for (i8 i = 1; addMoveToList(p, column + i, row - i, alpha, beta, possibleMoves); ++i);
@@ -1638,7 +1697,7 @@ struct Variation {
             for (i8 i = 1; addMoveToList(p, column, row + i, alpha, beta, possibleMoves); ++i);
             for (i8 i = 1; addMoveToList(p, column, row - i, alpha, beta, possibleMoves); ++i);
         } break;
-        case King:
+        case PieceGeneric::King:
         {
             //TODO castling
         } break;
@@ -2242,14 +2301,14 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
         case('1'):
         {
             //White moves king
-            board.canCastleLeft[(PlayerSide::WHITE + 1) / 2] = false;
-            board.canCastleRight[(PlayerSide::WHITE + 1) / 2] = false;
+            board.canCastleLeft[index(PlayerSide::WHITE)] = false;
+            board.canCastleRight[index(PlayerSide::WHITE)] = false;
         } break;
         case('8'):
         {
             //Black moves king
-            board.canCastleLeft[(PlayerSide::BLACK + 1) / 2] = false;
-            board.canCastleRight[(PlayerSide::BLACK + 1) / 2] = false;
+            board.canCastleLeft[index(PlayerSide::BLACK)] = false;
+            board.canCastleRight[index(PlayerSide::BLACK)] = false;
         } break;
         default:
             break;
@@ -2259,10 +2318,10 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
         switch (move[1])
         {
         case('1'): {
-            board.canCastleLeft[(PlayerSide::WHITE + 1) / 2] = false;//White moves left rook
+            board.canCastleLeft[index(PlayerSide::WHITE)] = false;//White moves left rook
         } break;
         case('8'): {
-            board.canCastleLeft[(PlayerSide::BLACK + 1) / 2] = false;//Black moves left rook
+            board.canCastleLeft[index(PlayerSide::BLACK)] = false;//Black moves left rook
         } break;
         default:
             break;
@@ -2272,10 +2331,10 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
         switch (move[1])
         {
         case ('1'): {
-            board.canCastleRight[(PlayerSide::WHITE + 1) / 2] = false;//White moves right rook
+            board.canCastleRight[index(PlayerSide::WHITE)] = false;//White moves right rook
         } break;
         case ('8'): {
-            board.canCastleRight[(PlayerSide::BLACK + 1) / 2] = false;//Black moves right rook
+            board.canCastleRight[index(PlayerSide::BLACK)] = false;//Black moves right rook
         } break;
         default:
             break;
@@ -2391,8 +2450,8 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
     {
         float gamePhase = (17.0f - board.countPiecesMin()) / 16.0f;
 
-        const auto& myTime = playerTime[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? wtime : btime;
-        const auto& myInc = playerInc[(board.playerOnMove + 1) / 2];// == PlayerSide::WHITE ? winc : binc;
+        const auto& myTime = playerTime[index(board.playerOnMove)];// == PlayerSide::WHITE ? wtime : btime;
+        const auto& myInc = playerInc[index(board.playerOnMove)];// == PlayerSide::WHITE ? winc : binc;
 
         timeTargetMax = duration_t(((myTime * gamePhase) / 2));
         timeTargetOptimal = myInc + timeTargetMax / 4;
@@ -2836,13 +2895,13 @@ int uci(std::istream& in, std::ostream& output)
                 if (word.empty())
                     break;
                 else if (word == "wtime")
-                    playerTime[(PlayerSide::WHITE + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
+                    playerTime[index(PlayerSide::WHITE)] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "btime")
-                    playerTime[(PlayerSide::BLACK + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
+                    playerTime[index(PlayerSide::BLACK)] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "winc")
-                    playerInc[(PlayerSide::WHITE + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
+                    playerInc[index(PlayerSide::WHITE)] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "binc")
-                    playerInc[(PlayerSide::BLACK + 1) / 2] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
+                    playerInc[index(PlayerSide::BLACK)] = std::chrono::milliseconds(atoll(getWord(commandView).data()));
                 else if (word == "movetime")
                 {
                     timeTarget = std::chrono::milliseconds(atoll(getWord(commandView).data()));
