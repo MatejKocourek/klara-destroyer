@@ -2453,8 +2453,8 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
         const auto& myTime = playerTime[index(board.playerOnMove)];// == PlayerSide::WHITE ? wtime : btime;
         const auto& myInc = playerInc[index(board.playerOnMove)];// == PlayerSide::WHITE ? winc : binc;
 
-        timeTargetMax = duration_t(((myTime * gamePhase) / 2));
-        timeTargetOptimal = myInc + timeTargetMax / 4;
+        timeTargetMax = duration_t(((myTime * gamePhase) / 3));
+        timeTargetOptimal = myInc + timeTargetMax / 3;
 
         //if (ponder)
         //{
