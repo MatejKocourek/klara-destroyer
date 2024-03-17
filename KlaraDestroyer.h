@@ -1875,9 +1875,8 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
     }
 }
 
-std::mutex m_workers;
-std::condition_variable cv_workers;
 std::atomic<bool> workToDo = false;
+std::atomic<bool> threadRestartWanted = false;
 void on_completion() noexcept {
     workToDo = false;
 }
@@ -1885,18 +1884,14 @@ std::optional<std::barrier<void(*)() noexcept>> barrier;
 
 stack_vector<std::thread, maxMoves> threadWorkers;
 
-bool threadRestartWanted = false;
+
 
 void threadWorker(size_t threadId)
 {
     while (true)
     {
         //debugOut << "thread " << threadId<<" ready for more work" << std::endl;
-        {
-            //Wait until next work is ready
-            std::unique_lock lk(m_workers);
-            cv_workers.wait(lk, [] { return workToDo.load(); });
-        }
+        workToDo.wait(false);//Wait until next work is ready
         //debugOut << "thread " << threadId <<" notified" << std::endl;
         if (threadRestartWanted) [[unlikely]]//For changing the amount of workers
             break;
@@ -1913,7 +1908,7 @@ void threadRestart(size_t threadsNewCount)
     {
         threadRestartWanted = true;
         workToDo = true;
-        cv_workers.notify_all();
+        workToDo.notify_all();
 
         for (auto& i : threadWorkers)
             i.join();
@@ -1921,9 +1916,8 @@ void threadRestart(size_t threadsNewCount)
         threadWorkers.clear();
     }
 
-    threadRestartWanted = false;
     workToDo = false;
-    //latchIdGlobal = 0;
+    threadRestartWanted = false;
 
     barrier.emplace(threadsNewCount, on_completion);
 
@@ -2135,7 +2129,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
 
 
         workToDo = true;
-        cv_workers.notify_all();
+        workToDo.notify_all();
 
 
         workerFromQ(0);//Do work on this thread
