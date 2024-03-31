@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
         std::string_view argument(argv[1]);
         if (argument == "bench")
         {
-            deterministic = true;
+            shuffle = false;
             if (argc < 3)
                 return 1;
             int n = std::atoi(argv[2]);
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
 #ifdef _DEBUG
         else if (argument == "test")
         {
-            deterministic = true;
+            shuffle = false;
             if (argc < 3)
                 return 1;
             int n = std::atoi(argv[2]);
@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
     }
     else
     {
-        deterministic = false;
+        shuffle = true;
         return uci(std::cin,std::cout);
     }
 

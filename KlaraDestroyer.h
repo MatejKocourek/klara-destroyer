@@ -189,7 +189,7 @@ static constexpr bool dynamicPositionRanking = false;//Not needed, static rankin
 static i8 fullDepth;
 static i8 availableMoves;
 static PlayerSide onMoveW;
-static bool deterministic;
+static bool shuffle;
 static std::chrono::steady_clock::time_point timeGlobalStarted;
 //static std::chrono::steady_clock::time_point timeDepthStarted;
 static std::atomic<float> alphaOrBeta;
@@ -1764,9 +1764,9 @@ void printLowerBound(i8 depth)
     if (currentLowerBound*onMoveW < lastReportedLowerBound * onMoveW)
     {
         std::osyncstream syncout(out);
-        syncout << "info depth " << fullDepth << ' ';
+        syncout << "info depth " << (unsigned)fullDepth << ' ';
         if (depth + 1 != fullDepth)
-            syncout << "seldepth " << depth + 1;
+            syncout << "seldepth " << (unsigned)depth + 1 << ' ';
 
         printScore(syncout, currentLowerBound, depth + 1, oppositeSide(onMoveW));
         syncout << ' ';
@@ -1810,6 +1810,8 @@ Variation evaluateGameMove(Variation localBoard)//, double alpha = -std::numeric
         //board.nodes = localBoard.nodes;
         localBoard.time = std::chrono::high_resolution_clock::now() - timeStart;
     }
+    else
+        localBoard.time = duration_t(0); //Known draw by repetition
     switch (localBoard.board.playerOnMove)
     {
     case PlayerSide::BLACK: {
@@ -1832,7 +1834,7 @@ Variation evaluateGameMove(Variation localBoard)//, double alpha = -std::numeric
 
 static stack_vector<Variation, maxMoves>* q;
 static std::atomic<size_t> qPos;
-static stack_vector<Variation, maxMoves>* solvedMoves;
+//static stack_vector<Variation, maxMoves>* solvedMoves;
 static std::mutex m_solved;
 
 void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
@@ -1867,8 +1869,14 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
 
         if (!criticalTimeDepleted) [[likely]]
         {
-            std::unique_lock lk(m_solved);
-            solvedMoves->push_back(std::move(res));
+            //std::unique_lock lk(m_solved);
+            //solvedMoves->push_back(std::move(res));
+            board = std::move(res);
+        }
+        else
+        {
+            //board.time = std::numeric_limits<duration_t>::infinity();
+            //ALREADY DONE ^
         }
         //if (criticalTimeDepleted) [[unlikely]]
         //    --qPos;
@@ -1931,18 +1939,21 @@ bool cutoffBadMoves(stack_vector<Variation,maxMoves>& boards, float cutoffPointR
 
     float cutoffPoint = bestMoveScore - cutoffPointRelative;
 
-    size_t i = 1;
-    for (;i < boards.size(); ++i)
+    stack_vector<Variation, maxMoves> newBoards;
+
+    size_t cutoffCounter = 0;
+
+    for (size_t i = 1; i < boards.size(); ++i)
     {
-        if ((-boards[i].bestFoundValue * boards[0].firstMoveOnMove) < cutoffPoint)
-            break;
+        if ((-boards[i].bestFoundValue * boards[0].firstMoveOnMove) >= cutoffPoint)
+            newBoards.push_back(std::move(boards[i]));
+        else
+            ++cutoffCounter;
     }
 
-    debugOut << "Cutting off " << boards.size() - i << " bad moves to save time" << std::endl;
+    debugOut << "Cutting off " << cutoffCounter << " bad moves to save time" << std::endl;
 
-    bool cutOffAnything = (boards.size() - i) != 0;
-    boards.resize(i);
-    return cutOffAnything;
+    return cutoffCounter != 0;
 }
 
 
@@ -1970,10 +1981,11 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
         << nl;
 }
 
+static auto rd = std::random_device{};
+static auto rng = std::default_random_engine{ rd() };
+
 stack_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)//, i8 depth = 1
 {
-    static auto rd = std::random_device{};
-    static auto rng = std::default_random_engine{ rd() };
     alphaOrBeta = std::numeric_limits<float>::max() * board.playerOnMove;
     const i8 depth = 1;
     criticalTimeDepleted = false;
@@ -2044,7 +2056,7 @@ stack_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSid
 
     //saveToVector = false;
 
-    if (!deterministic)
+    if (shuffle)
     {
         std::shuffle(res.begin(), res.end(), rng);
     }
@@ -2097,6 +2109,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
                 i.variationDepth = depth;
             }
 
+        i.time = static_cast<duration_t>(std::numeric_limits<double>::infinity()); //To know which failed to finish
     }
 
 
@@ -2115,8 +2128,8 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
         q = &boards;
         qPos = 0;
 
-        stack_vector<Variation, maxMoves> resultBoards;
-        solvedMoves = &resultBoards;
+
+        //solvedMoves = &resultBoards;
 
 
 
@@ -2136,6 +2149,79 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
 
         barrier->arrive_and_wait();//Wait for the workers to finish
 
+
+        stack_vector<Variation, maxMoves> resultBoards;
+
+        float best;
+        if (firstLevelPruning)
+        {
+            //Find best value
+            switch (onMoveResearched)
+            {
+            case PlayerSide::WHITE: {
+                best = std::numeric_limits<float>::infinity();
+                for (const auto& i : boards)
+                {
+                    if (i.bestFoundValue < best)
+                        best = i.bestFoundValue;
+                }
+            } break;
+            case PlayerSide::BLACK: {
+                best = -std::numeric_limits<float>::infinity();
+                for (const auto& i : boards)
+                {
+                    if (i.bestFoundValue > best)
+                        best = i.bestFoundValue;
+                }
+            } break;
+            default:
+                std::unreachable();
+            }
+
+            //Add all best solutions to results
+            for (auto& i : boards)
+            {
+                if (i.bestFoundValue == best)
+                {
+                    resultBoards.push_back(i);
+                    i.time = static_cast<duration_t>(std::numeric_limits<double>::infinity());
+                }
+            }
+
+        }
+
+        //Shuffle best results if required and best result is not draw
+        if (resultBoards.size() > 1 && best != 0.0f && shuffle)
+        {
+            std::shuffle(resultBoards.begin(), resultBoards.end(), rng);
+        }
+
+        //Add the rest of the boards that finished computation without changing the order
+        for (auto& i : boards)
+        {
+            if (i.time != static_cast<duration_t>(std::numeric_limits<double>::infinity()))
+            {
+                resultBoards.push_back(std::move(i));
+            }
+            else
+                debugOut << "board " << i.firstMoveNotation << " has value of infinity" << std::endl;
+        }
+
+        //Sort only if we know the real value of all boards
+        if (!firstLevelPruning)
+        {
+            switch (onMoveResearched)
+            {
+            case PlayerSide::WHITE: {
+                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::less<Variation>());
+            } break;
+            case PlayerSide::BLACK: {
+                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::greater<Variation>());
+            } break;
+            default:
+                std::unreachable();
+            }
+        }
 
         //q.clear();
         //transpositions.clear();
@@ -2157,7 +2243,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
                     goto bestMoveFound;
                 }
             }
-            debugOut << "Time ran out and the engine did not manage to include the supposed best move. Cancelling the results." << std::endl;
+            debugOut << "Time ran out and the engine did not manage to include the suppossed best move. Cancelling the results." << std::endl;
             return duration_t(std::numeric_limits<double>::infinity());
 
         }
@@ -2169,31 +2255,20 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
 
         totalNodesAll += totalNodesDepth;
 
-        timeFirstBoard = resultBoards[0].time;
+        //timeFirstBoard = resultBoards[0].time;
 
-
-
-
-        switch (onMoveResearched)
         {
-        case PlayerSide::WHITE: {
-            std::stable_sort(resultBoards.begin(), resultBoards.end(), std::less<Variation>());
-        } break;
-        case PlayerSide::BLACK: {
-            std::stable_sort(resultBoards.begin(), resultBoards.end(), std::greater<Variation>());
-        } break;
-        default:
-            std::unreachable();
+            size_t i = 0;
+            do
+            {
+                timeFirstBoard = resultBoards[i++].time;//TODO possible segfault, counter can rise indefinitely
+            } while (timeFirstBoard.count() <= 0);
+
+            if(timeFirstBoard.count() == 0) //All are 0 - all moves lead to a draw by repetition. No need to search further
+                timeFirstBoard = duration_t(std::numeric_limits<double>::infinity());
         }
 
-
-
         boards = std::move(resultBoards);
-        //float scoreCp = boards.front().bestFoundValue;
-        //debugOut << "ScoreCP: " << scoreCp << std::endl;
-
-        //if (criticalTimeDepleted)
-        //    return;
     }
     duration_t elapsedThis = std::chrono::high_resolution_clock::now() - timeThisStarted;
     duration_t elapsedTotal = std::chrono::high_resolution_clock::now() - timeGlobalStarted;
@@ -2201,7 +2276,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
     if (options.Verbosity >= 6 || options.MultiPV > 1)
     {
         for (size_t i = boards.size() - 1; i != 0; --i)
-            printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, options.MultiPV == 1, oppositeSide(onMoveW));
+            printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, firstLevelPruning, oppositeSide(onMoveW));
     }
 
     if (options.Verbosity >= 1) //TODO: make it available to print later for the last depth if verbosity is set to 1, do not print every time unless >= 2.
@@ -2476,6 +2551,7 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
     auto boardList = generateMoves(board,board.playerOnMove, playedPositions);
     availableMoves = boardList.size();
 
+
     moveNotation bestPosFound;
 
     if (boardList.size() == 1) [[unlikely]]//If there is only one possible move to be played, no need to think about anything
@@ -2488,6 +2564,9 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
         stack_vector<std::pair<duration_t, moveNotation>, 256> previousResults;
 
         size_t i = 4;
+
+        if (availableMoves > options.Threads) //Optimization for A/B pruning
+            firstLevelPruning = false; //Depth 4 no pruning
 
         //Full depth search
         {
@@ -2531,6 +2610,12 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
                     debugOut << "Time ran out while in the broad depth mode" << std::endl;
                     goto returnResult;
                 }
+
+
+                if (options.MultiPV == 1)
+                    firstLevelPruning = true;
+                else
+                    firstLevelPruning = false;
             }
         }
 
