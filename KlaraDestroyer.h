@@ -7,7 +7,7 @@
 #include <cassert>
 #include <unordered_map>
 #include <iostream>
-#include <vector>
+//#include <vector>
 #include <queue>
 #include <thread>
 #include <cfloat>
@@ -627,19 +627,22 @@ public:
 
     auto operator<=>(const GameState&) const noexcept = default;
 
-    GameState(const GameState& copy) = default;
+    GameState(const GameState& copy) noexcept = default;
+
+    GameState(GameState&& move) noexcept = default;
+
+    GameState& operator=(const GameState& copy) noexcept = default;
+
+    GameState& operator=(GameState&& move) noexcept = default;
 
     GameState() : board{ Piece::Nothing }
     {
-        //for (auto& i : board) {
-        //    i = nullptr;
-        //}
     }
 
     constexpr GameState(std::array<Piece, 64> pieces, i32 repeatableMoves, PlayerSide playerOnMove, std::array<bool, 2> canCastleLeft, std::array<bool, 2> canCastleRight):board(pieces), repeatableMoves(repeatableMoves),playerOnMove(playerOnMove),canCastleLeft(canCastleLeft),canCastleRight(canCastleRight)
     {}
 
-    GameState& operator=(const GameState& copy) = default;
+
 
     constexpr std::array<i8, 128> piecesCount() const
     {
@@ -894,9 +897,9 @@ struct BoardHasher
     }
 };
 
+static stack_vector<std::pair<GameState, float>, maxMoves> firstPositions;
 
-
-
+template <bool saveToVector = false>
 struct Variation {
     GameState board;
     float bestFoundValue;
@@ -908,8 +911,8 @@ struct Variation {
     PlayerSide firstMoveOnMove;
     moveNotation firstMoveNotation;
 
-    std::vector<std::pair<GameState, float>> firstPositions;
-    bool saveToVector = false;
+
+    //bool saveToVector = false;
     //std::unordered_map<GameState, float, BoardHasher> transpositions;
 
     size_t nodes = 0;
@@ -922,9 +925,9 @@ struct Variation {
     Variation(Variation&& toMove) noexcept = default;// :researchedBoard(move(toMove.researchedBoard)), bestFoundValue(toMove.bestFoundValue), pieceTakenValue(toMove.pieceTakenValue) {}
 
 
-    Variation& operator=(Variation&& toMove) = default;
+    Variation& operator=(Variation&& toMove) noexcept = default;
 
-    Variation& operator=(const Variation& copy) = default;
+    Variation& operator=(const Variation& copy) noexcept = default;
 
     friend bool operator<(const Variation& l, const Variation& r)
     {
@@ -949,7 +952,9 @@ struct Variation {
         beta = std::numeric_limits<float>::max();
 
         TempSwap playerBackup(board.playerOnMove, onMove);
-        TempSwap vectorBackup(saveToVector, false);
+        //TempSwap vectorBackup(saveToVector, false);
+
+        Variation<false>* thisHack = reinterpret_cast<Variation<false> *>(this);//TODO prasarna
 
         TempSwap backupCastlingLeft(board.canCastleLeft, { false,false });
         TempSwap backupCastlingRight(board.canCastleRight, { false,false });
@@ -961,7 +966,7 @@ struct Variation {
                 continue;
             if (pieceColor(found) == onMove)
             {
-                auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), 1, alpha, beta, 0);
+                auto foundVal = thisHack->bestMoveWithThisPieceScore((i % 8), (i / 8), 1, alpha, beta, 0);
 
                 if (foundVal * onMove == pricePiece(PieceGeneric::King)) [[unlikely]]//Je možné vzít krále, hra skončila
                     {
@@ -1043,7 +1048,8 @@ struct Variation {
 
     bool isValidSetup()
     {
-        TempSwap saveVectorBackup(saveToVector, false);
+        //TempSwap saveVectorBackup(saveToVector, false);
+        
         //bool backup = saveToVector;
         //saveToVector = false;
         //Both kings must be on the researchedBoard exactly once
@@ -1219,7 +1225,8 @@ struct Variation {
 
                 if (bestValue == (float)(std::numeric_limits<float>::infinity() * board.playerOnMove * (-1))) [[unlikely]]//Nemůžu udělat žádný legitimní tah (pat nebo mat)
                     {
-                        TempSwap saveToVectorBackup(saveToVector, false);
+                        //TempSwap saveToVectorBackup(saveToVector, false);
+
                         if (canTakeKing(oppositeSide(board.playerOnMove)))//if (round((bestMoveScore(1, onMove * (-1),valueSoFar, alpha, beta) * playerOnMove * (-1))/100) == kingPrice/100)//Soupeř je v situaci, kdy mi může vzít krále (ohrožuje ho)
                         {
                             bestValue = -matePrice * board.playerOnMove;//Dostanu mat, co nejnižší skóre
@@ -1259,26 +1266,29 @@ struct Variation {
     void placePieceAt(Piece p, i8 column, i8 row, i8 depth, float& alpha, float& beta, float& bestValue, bool& doNotContinue, float valueSoFar, float priceTaken)
     {
         ++nodes;
-        if (saveToVector && depth == 0) [[unlikely]]
+        if constexpr (saveToVector)
         {
-
-            TempSwap backup(board.pieceAt(column, row), p);
-            board.playerOnMove = oppositeSide(board.playerOnMove);
-            if (isValidSetup())
+            if (depth == 0)
             {
-                //float pieceTakenValue = valueSoFar + priceAbsolute * pieceColor();
-                //board.print();
-                float balance = board.balance();
-                firstPositions.emplace_back(board, balance);
+                TempSwap backup(board.pieceAt(column, row), p);
+                board.playerOnMove = oppositeSide(board.playerOnMove);
+                if (isValidSetup())
+                {
+                    //float pieceTakenValue = valueSoFar + priceAbsolute * pieceColor();
+                    //board.print();
+                    float balance = board.balance();
+                    firstPositions.emplace_back(board, balance);
+                }
+                board.playerOnMove = oppositeSide(board.playerOnMove);
+                return;
             }
-            board.playerOnMove = oppositeSide(board.playerOnMove);
-            return;
         }
+
 
         //if (doNotContinue) [[unlikely]]
         //    return;
 
-        if (priceTaken >= pricePiece(PieceGeneric::King) - 128) [[unlikely]]//Je možné vzít krále
+        if (priceTaken >= pricePiece(PieceGeneric::King) - 128) [[unlikely]]//Possible to take king (probaly check?)
         {
             doNotContinue = true;
             bestValue = pricePiece(PieceGeneric::King) * board.playerOnMove;
@@ -1781,7 +1791,7 @@ void printLowerBound(i8 depth)
 size_t totalNodesAll;
 std::optional<duration_t> timeForTheFirst;
 
-Variation evaluateGameMove(Variation localBoard)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
+auto evaluateGameMove(Variation<> localBoard)//, double alpha = -std::numeric_limits<float>::max(), double beta = std::numeric_limits<float>::max())
 {
     if (localBoard.variationDepth > 0) [[likely]] //Not predetermined result - e.g. not a draw by repetition
     {
@@ -1832,7 +1842,7 @@ Variation evaluateGameMove(Variation localBoard)//, double alpha = -std::numeric
 }
 
 
-static stack_vector<Variation, maxMoves>* q;
+static stack_vector<Variation<>, maxMoves>* q;
 static std::atomic<size_t> qPos;
 //static stack_vector<Variation, maxMoves>* solvedMoves;
 static std::mutex m_solved;
@@ -1933,13 +1943,13 @@ void threadRestart(size_t threadsNewCount)
         threadWorkers.emplace_back(threadWorker, i);
 }
 
-bool cutoffBadMoves(stack_vector<Variation,maxMoves>& boards, float cutoffPointRelative)
+bool cutoffBadMoves(stack_vector<Variation<>,maxMoves>& boards, float cutoffPointRelative)
 {
     float bestMoveScore = -boards[0].bestFoundValue * boards[0].firstMoveOnMove;
 
     float cutoffPoint = bestMoveScore - cutoffPointRelative;
 
-    stack_vector<Variation, maxMoves> newBoards;
+    stack_vector<Variation<>, maxMoves> newBoards;
 
     size_t cutoffCounter = 0;
 
@@ -1959,7 +1969,7 @@ bool cutoffBadMoves(stack_vector<Variation,maxMoves>& boards, float cutoffPointR
 
 
 
-void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duration_t& elapsedDepth, const size_t& nodesDepth, const Variation& move, size_t moveRank, bool upperbound, PlayerSide pov)
+void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duration_t& elapsedDepth, const size_t& nodesDepth, const Variation<>& move, size_t moveRank, bool upperbound, PlayerSide pov)
 {
     const auto secondsPassed = std::chrono::duration_cast<std::chrono::duration<double>>(elapsedDepth);
     out
@@ -1984,7 +1994,7 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
 static auto rd = std::random_device{};
 static auto rng = std::default_random_engine{ rd() };
 
-stack_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)//, i8 depth = 1
+stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)//, i8 depth = 1
 {
     alphaOrBeta = std::numeric_limits<float>::max() * board.playerOnMove;
     const i8 depth = 1;
@@ -1999,17 +2009,19 @@ stack_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSid
     if (options.Verbosity >= 2)
         out << "info depth 1" << nl << std::flush;
     //transpositions.clear();
-    Variation tmp(board, 0, 0, 1, board.playerOnMove, "");
-    tmp.saveToVector = true;
+    Variation<true> tmp(board, 0, 0, 1, board.playerOnMove, "");
+    //tmp.saveToVector = true;
+
+    firstPositions.clear();
     tmp.bestMoveScore(1, 0, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
     //totalNodesDepth = tmp.nodes;
     totalNodesAll = tmp.nodes;
     //transpositions.clear();
-    stack_vector<Variation,maxMoves> res;// = std::move(firstPositions);
-    res.reserve(tmp.firstPositions.size());
+    stack_vector<Variation<>,maxMoves> res;// = std::move(firstPositions);
+    //res.reserve(firstPositions.size());
 
     //Add move names
-    for (auto& pos : tmp.firstPositions)
+    for (auto& pos : firstPositions)
     {
         if (std::find(playedPositions.begin(), playedPositions.end(), pos.first.board) != playedPositions.end()) [[unlikely]]
         {
@@ -2064,10 +2076,10 @@ stack_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSid
     switch (bestForWhichSide)
     {
     case PlayerSide::WHITE: {
-        std::sort(res.begin(), res.end(), std::greater<Variation>());
+        std::sort(res.begin(), res.end(), std::greater<Variation<>>());
     } break;
     case PlayerSide::BLACK: {
-        std::sort(res.begin(), res.end(), std::less<Variation>());
+        std::sort(res.begin(), res.end(), std::less<Variation<>>());
     } break;
     default:
         std::unreachable();
@@ -2090,7 +2102,7 @@ stack_vector<Variation,maxMoves> generateMoves(const GameState& board, PlayerSid
     return res;
 }
 
-duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 depth)//, PlayerSide onMove)
+duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 depth)//, PlayerSide onMove)
 {
     AssertAssume(!boards.empty());
     PlayerSide onMoveResearched = boards.front().board.playerOnMove;
@@ -2150,7 +2162,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
         barrier->arrive_and_wait();//Wait for the workers to finish
 
 
-        stack_vector<Variation, maxMoves> resultBoards;
+        stack_vector<Variation<>, maxMoves> resultBoards;
 
         float best;
         if (firstLevelPruning)
@@ -2213,10 +2225,10 @@ duration_t findBestOnSameLevel(stack_vector<Variation, maxMoves>& boards, i8 dep
             switch (onMoveResearched)
             {
             case PlayerSide::WHITE: {
-                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::less<Variation>());
+                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::less<Variation<>>());
             } break;
             case PlayerSide::BLACK: {
-                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::greater<Variation>());
+                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::greater<Variation<>>());
             } break;
             default:
                 std::unreachable();
@@ -2446,7 +2458,7 @@ GameState posFromString(std::string_view str, stack_vector<std::array<Piece, 64>
 
 }
 
-Variation findBestInNumberOfMoves(GameState& board, i8 moves)
+Variation<> findBestInNumberOfMoves(GameState& board, i8 moves)
 {
     timeGlobalStarted = std::chrono::high_resolution_clock::now();
     //dynamicPositionRanking = false;
