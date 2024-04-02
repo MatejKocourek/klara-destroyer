@@ -19,8 +19,8 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <latch>
 #include <barrier>
+#include <future>
 #include "stack_vector.h"
 #include "stack_string.h"
 
@@ -904,15 +904,11 @@ struct Variation {
     GameState board;
     float bestFoundValue;
     float startingValue;
-    //GameState movePosition;
     i8 variationDepth;
-    //std::chrono::duration<float, std::milli> researchedTime{0};
 
     PlayerSide firstMoveOnMove;
     moveNotation firstMoveNotation;
 
-
-    //bool saveToVector = false;
     //std::unordered_map<GameState, float, BoardHasher> transpositions;
 
     size_t nodes = 0;
@@ -2174,7 +2170,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
                 best = std::numeric_limits<float>::infinity();
                 for (const auto& i : boards)
                 {
-                    if (i.bestFoundValue < best)
+                    if (i.time != static_cast<duration_t>(std::numeric_limits<double>::infinity()) && i.bestFoundValue < best)
                         best = i.bestFoundValue;
                 }
             } break;
@@ -2182,7 +2178,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
                 best = -std::numeric_limits<float>::infinity();
                 for (const auto& i : boards)
                 {
-                    if (i.bestFoundValue > best)
+                    if (i.time != static_cast<duration_t>(std::numeric_limits<double>::infinity()) && i.bestFoundValue > best)
                         best = i.bestFoundValue;
                 }
             } break;
@@ -2193,7 +2189,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
             //Add all best solutions to results
             for (auto& i : boards)
             {
-                if (i.bestFoundValue == best)
+                if (i.time != static_cast<duration_t>(std::numeric_limits<double>::infinity()) && i.bestFoundValue == best)
                 {
                     resultBoards.push_back(i);
                     i.time = static_cast<duration_t>(std::numeric_limits<double>::infinity());
