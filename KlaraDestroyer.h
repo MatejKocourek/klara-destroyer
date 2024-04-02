@@ -1990,7 +1990,7 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
 static auto rd = std::random_device{};
 static auto rng = std::default_random_engine{ rd() };
 
-stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)//, i8 depth = 1
+stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 150>& playedPositions)//, i8 depth = 1
 {
     alphaOrBeta = std::numeric_limits<float>::max() * board.playerOnMove;
     const i8 depth = 1;
@@ -2322,7 +2322,7 @@ std::string_view getWord(std::string_view& str)
     return res;
 }
 
-void executeMove(GameState& board, std::string_view& str, stack_vector<std::array<Piece, 64>,75>& playedPositions)
+void executeMove(GameState& board, std::string_view& str, stack_vector<std::array<Piece, 64>,150>& playedPositions)
 {
     auto move = getWord(str);
 
@@ -2425,7 +2425,7 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
     board.playerOnMove = oppositeSide(board.playerOnMove);
 }
 
-void parseMoves(GameState& board, std::string_view str, stack_vector<std::array<Piece, 64>, 75>& playedPositions)
+void parseMoves(GameState& board, std::string_view str, stack_vector<std::array<Piece, 64>, 150>& playedPositions)
 {
     if (getWord(str) != "moves")
         return;
@@ -2438,7 +2438,7 @@ void parseMoves(GameState& board, std::string_view str, stack_vector<std::array<
 
 
 
-GameState posFromString(std::string_view str, stack_vector<std::array<Piece, 64>, 75>& playedPositions)
+GameState posFromString(std::string_view str, stack_vector<std::array<Piece, 64>, 150>& playedPositions)
 {
     if (getWord(str) == "startpos") [[likely]]
     {
@@ -2514,7 +2514,7 @@ duration_t predictTime(const duration_t& olderTime, const duration_t& newerTime,
     return projectedNextTime;
 }
 
-void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, size_t maxDepth, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)
+void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, size_t maxDepth, const stack_vector<std::array<Piece, 64>, 150>& playedPositions)
 {
     std::unique_lock l(uciGoM);
     timeGlobalStarted = std::chrono::high_resolution_clock::now();
@@ -2869,7 +2869,7 @@ int uci(std::istream& in, std::ostream& output)
         //{
         //    out << "readyok" << std::endl;
     GameState board;
-    stack_vector<std::array<Piece, 64>, 75> playedPositions;
+    stack_vector<std::array<Piece, 64>, 150> playedPositions;
     //std::ofstream debugOut("debug.log");
 
     while (true)
