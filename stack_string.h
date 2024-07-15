@@ -27,7 +27,7 @@ public:
 	}
 	stack_string(const char* string)
 	{
-		assert(strlen(string) < max_size());
+		assert(strlen(string) <= max_size());
 		_size = strlen(string);
 		std::memcpy(_data.data(), string, _size);
 	}

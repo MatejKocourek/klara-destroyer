@@ -567,24 +567,17 @@ constexpr i8 initialRow(Piece p) {
     }
 }
 
-std::array<Piece, 4> availablePromotes(Piece p)
+constexpr std::array<Piece, 4> availablePromotes(Piece p)
 {
-    switch (p)
-    {
-    case Piece::PawnWhite:
-    {
-        static std::array<Piece, 4> whiteEvolveLastRow{ Piece::QueenWhite, Piece::RookWhite, Piece::BishopWhite, Piece::KnightWhite };
-        return whiteEvolveLastRow;
-    }
-    case Piece::PawnBlack:
-    {
-        static std::array<Piece, 4> blackEvolveLastRow{ Piece::QueenBlack, Piece::RookBlack, Piece::BishopBlack, Piece::KnightBlack };
-        return blackEvolveLastRow;
-    }
-    default:
-        std::unreachable();
-    }
+    AssertAssume(toGenericPiece(p) == PieceGeneric::Pawn);
 
+    constexpr std::array<std::array<Piece, 4>, 2> evolveLastRow{ {{ Piece::QueenBlack, Piece::RookBlack, Piece::BishopBlack, Piece::KnightBlack } , { Piece::QueenWhite, Piece::RookWhite, Piece::BishopWhite, Piece::KnightWhite }} };
+
+    static_assert(index(PlayerSide::BLACK) == 0 && index(PlayerSide::WHITE) == 1); // We are assuming this in the array above
+
+    static_assert((i8)Piece::PawnWhite == 1 && (i8)Piece::PawnBlack == -1); // With the hack that we are doing in the next step, we need the pawns to be 1 and -1.
+
+    return evolveLastRow[index((PlayerSide)p)];
 }
 
 /*
@@ -622,8 +615,7 @@ public:
     std::array<Piece, 64> board;
     i32 repeatableMoves;
     PlayerSide playerOnMove;
-    std::array<bool, 2> canCastleLeft;
-    std::array<bool, 2> canCastleRight;
+    std::array<std::array<bool, 2>, 2> canCastle;
 
     auto operator<=>(const GameState&) const noexcept = default;
 
@@ -639,7 +631,7 @@ public:
     {
     }
 
-    constexpr GameState(std::array<Piece, 64> pieces, i32 repeatableMoves, PlayerSide playerOnMove, std::array<bool, 2> canCastleLeft, std::array<bool, 2> canCastleRight):board(pieces), repeatableMoves(repeatableMoves),playerOnMove(playerOnMove),canCastleLeft(canCastleLeft),canCastleRight(canCastleRight)
+    constexpr GameState(std::array<Piece, 64> pieces, i32 repeatableMoves, PlayerSide playerOnMove, std::array<std::array<bool, 2>, 2> canCastle):board(pieces), repeatableMoves(repeatableMoves),playerOnMove(playerOnMove),canCastle(canCastle)
     {}
 
 
@@ -833,49 +825,9 @@ public:
             },
             0,
             PlayerSide::WHITE,
-            { true, true },
-            { true, true }
+            { { { true, true },
+            { true, true } } }
         );
-        //initial.playerOnMove = PlayerSide::WHITE;
-        //initial.canCastleLeft.fill(true);
-        //initial.canCastleRight.fill(true);
-
-        //initial.pieceAt('a', '1') = Piece::RookWhite;
-        //initial.pieceAt('b', '1') = Piece::KnightWhite;
-        //initial.pieceAt('c', '1') = Piece::BishopWhite;
-        //initial.pieceAt('d', '1') = Piece::QueenWhite;
-        //initial.pieceAt('e', '1') = Piece::KingWhite;
-        //initial.pieceAt('f', '1') = Piece::BishopWhite;
-        //initial.pieceAt('g', '1') = Piece::KnightWhite;
-        //initial.pieceAt('h', '1') = Piece::RookWhite;
-
-        //initial.pieceAt('a', '2') = Piece::PawnWhite;
-        //initial.pieceAt('b', '2') = Piece::PawnWhite;
-        //initial.pieceAt('c', '2') = Piece::PawnWhite;
-        //initial.pieceAt('d', '2') = Piece::PawnWhite;
-        //initial.pieceAt('e', '2') = Piece::PawnWhite;
-        //initial.pieceAt('f', '2') = Piece::PawnWhite;
-        //initial.pieceAt('g', '2') = Piece::PawnWhite;
-        //initial.pieceAt('h', '2') = Piece::PawnWhite;
-
-        //initial.pieceAt('a', '8') = Piece::RookBlack;
-        //initial.pieceAt('b', '8') = Piece::KnightBlack;
-        //initial.pieceAt('c', '8') = Piece::BishopBlack;
-        //initial.pieceAt('d', '8') = Piece::QueenBlack;
-        //initial.pieceAt('e', '8') = Piece::KingBlack;
-        //initial.pieceAt('f', '8') = Piece::BishopBlack;
-        //initial.pieceAt('g', '8') = Piece::KnightBlack;
-        //initial.pieceAt('h', '8') = Piece::RookBlack;
-
-        //initial.pieceAt('a', '7') = Piece::PawnBlack;
-        //initial.pieceAt('b', '7') = Piece::PawnBlack;
-        //initial.pieceAt('c', '7') = Piece::PawnBlack;
-        //initial.pieceAt('d', '7') = Piece::PawnBlack;
-        //initial.pieceAt('e', '7') = Piece::PawnBlack;
-        //initial.pieceAt('f', '7') = Piece::PawnBlack;
-        //initial.pieceAt('g', '7') = Piece::PawnBlack;
-        //initial.pieceAt('h', '7') = Piece::PawnBlack;
-        //return initial;
     }
 };
 
@@ -952,8 +904,7 @@ struct Variation {
 
         Variation<false>* thisHack = reinterpret_cast<Variation<false> *>(this);//TODO prasarna
 
-        TempSwap backupCastlingLeft(board.canCastleLeft, { false,false });
-        TempSwap backupCastlingRight(board.canCastleRight, { false,false });
+        TempSwap backupCastling(board.canCastle, { {{ false,false }, { false,false }} });
 
         for (i8 i = 0; i < board.board.size(); ++i) {
             Piece found = board.board[i];
@@ -1442,36 +1393,35 @@ struct Variation {
             case PieceGeneric::Pawn:
             {
                 if (row + playerDirection(board.playerOnMove) == promoteRow(board.playerOnMove)) [[unlikely]]
-                    {
-                        const auto& availableOptions = availablePromotes(p);//evolveIntoReference(row + advanceRow());
-                        for (const auto& evolveOption : availableOptions) {
-                            float valueDifferenceNextMove = (pricePiece(evolveOption) - pricePiece(piece)) * board.playerOnMove;//Increase in material when the pawn promotes
-                            float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
+                {
+                    const auto& availableOptions = availablePromotes(p);
+                    for (const auto& evolveOption : availableOptions) {
+                        float valueDifferenceNextMove = (pricePiece(evolveOption) - pricePiece(piece)) * board.playerOnMove;//Increase in material when the pawn promotes
+                        float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
 
-                            //Capture diagonally
-                            tryPlacingPieceAt(evolveOption, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-                            tryPlacingPieceAt(evolveOption, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-
-                            //Go forward
-                            tryPlacingPieceAt(evolveOption, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
-                        }
-                    }
-                else [[likely]]
-                    {
                         //Capture diagonally
-                        tryPlacingPieceAt(p, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
-                        tryPlacingPieceAt(p, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+                        tryPlacingPieceAt(evolveOption, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+                        tryPlacingPieceAt(evolveOption, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
 
                         //Go forward
-                        bool goForwardSuccessful = tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
-                        if (goForwardSuccessful) [[likely]]//Field in front of the pawn is empty, can make a second step
-                            {
-                                if (row == initialRow(p))//Two fields forward
-                                {
-                                    tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove) * 2, depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
-                                }
-                            }
+                        tryPlacingPieceAt(evolveOption, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
                     }
+                }
+                else [[likely]]
+                {
+                    //Capture diagonally
+                    tryPlacingPieceAt(p, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+                    tryPlacingPieceAt(p, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+
+                    //Go forward
+
+                    //First, try two fields forward (if possible) since it is usually the better option
+                    if (row == initialRow(p) && board.pieceAt(column, row + playerDirection(board.playerOnMove)) == Piece::Nothing)
+                        tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove) * 2, depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+
+                    //Try one field forward
+                    tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+                }
 
             } break;
             case PieceGeneric::Knight:
@@ -1495,43 +1445,18 @@ struct Variation {
             } break;
             case PieceGeneric::Rook:
             {
-                bool castleLeftBackup;
-                bool castleRightBackup;
+                std::optional<TempSwap<bool>> castleBackup;
 
-                if (initialRow(p) == row)
-                {
-                    if (column == 0)
-                    {
-                        bool& canICastleLeft = board.canCastleLeft[index(board.playerOnMove)];
-                        castleLeftBackup = canICastleLeft;
-                        canICastleLeft = false;
-                    }
-                    else if (column == 7)
-                    {
-                        bool& canICastleRight = board.canCastleRight[index(board.playerOnMove)];
-                        castleRightBackup = canICastleRight;
-                        canICastleRight = false;
-                    }
-                }
+                assert(column <= 7 && column >= 0);
+
+                if (initialRow(p) == row && column % 7 == 0)
+                    castleBackup.emplace(board.canCastle[column / 7][index(board.playerOnMove)], false);
 
                 for (i8 i = 1; tryPlacingPieceAt(p, column, row + i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
                 for (i8 i = 1; tryPlacingPieceAt(p, column, row - i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
                 for (i8 i = 1; tryPlacingPieceAt(p, column + i, row, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
                 for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
 
-                if (initialRow(p) == row)
-                {
-                    if (column == 0)
-                    {
-                        bool& canICastleLeft = board.canCastleLeft[index(board.playerOnMove)];
-                        canICastleLeft = castleLeftBackup;
-                    }
-                    else if (column == 7)
-                    {
-                        bool& canICastleRight = board.canCastleRight[index(board.playerOnMove)];
-                        canICastleRight = castleRightBackup;
-                    }
-                }
             } break;
             case PieceGeneric::Queen:
             {
@@ -1548,8 +1473,8 @@ struct Variation {
             } break;
             case PieceGeneric::King:
             {
-                bool& canICastleLeft = board.canCastleLeft[index(board.playerOnMove)];
-                bool& canICastleRight = board.canCastleRight[index(board.playerOnMove)];
+                bool& canICastleLeft = board.canCastle[0][index(board.playerOnMove)];
+                bool& canICastleRight = board.canCastle[1][index(board.playerOnMove)];
 
 
 #ifndef CASTLING_DISABLED
@@ -1599,37 +1524,23 @@ struct Variation {
 
     float bestMoveWithThisPieceScoreOrdered(i8 column, i8 row, i8 depth, float& alpha, float& beta, float valueSoFar)
     {
-        //return bestMoveWithThisPieceScore(board, column, row, depth, alpha, beta, valueSoFar, doNotContinue);
         Piece p = board.pieceAt(column, row);
-        PieceGeneric piece = toGenericPiece(p);
-        PlayerSide color = pieceColor(p);
 
-        switch (piece)
-        {
-        case PieceGeneric::Pawn:
-        case PieceGeneric::Rook:
-        case PieceGeneric::King:
-            return bestMoveWithThisPieceScore(column, row, depth, alpha, beta, valueSoFar);
-        }
-        float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
-        board.pieceAt(column, row) = Piece::Nothing;
-        valueSoFar -= priceAdjustmentPov(p, column, row) * board.playerOnMove;//We are leaving our current position
-        //board.playerOnMove = oppositeSide(board.playerOnMove);
+        std::optional<TempSwap<bool>> castleBackup; // Castling backup (only if moving rooks/king)
 
         stack_vector<std::pair<float, std::pair<i8, i8>>, 27> possibleMoves;
 
-        switch (piece)
+        switch (toGenericPiece(p))
         {
         case PieceGeneric::Nothing:
             break;
         case PieceGeneric::Pawn:
         {
-            //TODO
+            // No need to order/sort pawn movement, there are very few options which can usually be ordered hard-coded.
+            return bestMoveWithThisPieceScore(column, row, depth, alpha, beta, valueSoFar);
         } break;
         case PieceGeneric::Knight:
         {
-            //stack_vector<std::pair<float, std::pair<i8, i8>>, 8> possibleMoves;
-
             addMoveToList(p, column + 1, row + 2, alpha, beta, possibleMoves);
             addMoveToList(p, column + 1, row - 2, alpha, beta, possibleMoves);
             addMoveToList(p, column + 2, row + 1, alpha, beta, possibleMoves);
@@ -1642,8 +1553,6 @@ struct Variation {
         } break;
         case PieceGeneric::Bishop:
         {
-            //stack_vector<std::pair<float, std::pair<i8, i8>>, 13> possibleMoves;
-
             for (i8 i = 1; addMoveToList(p, column + i, row + i, alpha, beta, possibleMoves); ++i);
             for (i8 i = 1; addMoveToList(p, column + i, row - i, alpha, beta, possibleMoves); ++i);
             for (i8 i = 1; addMoveToList(p, column - i, row + i, alpha, beta, possibleMoves); ++i);
@@ -1651,46 +1560,18 @@ struct Variation {
         } break;
         case PieceGeneric::Rook:
         {
-            //TODO castling how to?
+            assert(column <= 7 && column >= 0);
 
-            //bool castleLeftBackup;
-            //bool castleRightBackup;
+            // Back up castling if needed
+            if (initialRow(p) == row && column % 7 == 0)
+                castleBackup.emplace(board.canCastle[column / 7][index(board.playerOnMove)], false);
 
-            //if (initialRow(p) == row)
-            //{
-            //    if (column == 0)
-            //    {
-            //        bool& canICastleLeft = board.canCastleLeft[(pieceColor(p) + 1) / 2];
-            //        castleLeftBackup = canICastleLeft;
-            //        canICastleLeft = false;
-            //    }
-            //    else if (column == 7)
-            //    {
-            //        bool& canICastleRight = board.canCastleRight[(pieceColor(p) + 1) / 2];
-            //        castleRightBackup = canICastleRight;
-            //        canICastleRight = false;
-            //    }
-            //}
+            for (i8 i = 1; addMoveToList(p, column + i, row, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column - i, row, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column, row + i, alpha, beta, possibleMoves); ++i);
+            for (i8 i = 1; addMoveToList(p, column, row - i, alpha, beta, possibleMoves); ++i);
 
-            //for (i8 i = 1; addMoveToList(p, board, column + i, row, alpha, beta, possibleMoves); ++i);
-            //for (i8 i = 1; addMoveToList(p, board, column - i, row, alpha, beta, possibleMoves); ++i);
-            //for (i8 i = 1; addMoveToList(p, board, column, row + i, alpha, beta, possibleMoves); ++i);
-            //for (i8 i = 1; addMoveToList(p, board, column, row - i, alpha, beta, possibleMoves); ++i);
-
-
-            //if (initialRow(p) == row)
-            //{
-            //    if (column == 0)
-            //    {
-            //        bool& canICastleLeft = board.canCastleLeft[(pieceColor(p) + 1) / 2];
-            //        canICastleLeft = castleLeftBackup;
-            //    }
-            //    else if (column == 7)
-            //    {
-            //        bool& canICastleRight = board.canCastleRight[(pieceColor(p) + 1) / 2];
-            //        canICastleRight = castleRightBackup;
-            //    }
-            //}
+            // Castling will be restored only after the actual tryout, not here
         } break;
         case PieceGeneric::Queen:
         {
@@ -1705,7 +1586,9 @@ struct Variation {
         } break;
         case PieceGeneric::King:
         {
-            //TODO castling
+            //TODO make this piece work
+            //Watch out for castling support!
+            return bestMoveWithThisPieceScore(column, row, depth, alpha, beta, valueSoFar);
         } break;
         default:
             std::unreachable();
@@ -1723,12 +1606,11 @@ struct Variation {
             std::unreachable();
         }
 
+        TempSwap pieceBackup(board.pieceAt(column, row), Piece::Nothing);
+        float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
+
         for (const auto& i : possibleMoves)
-            tryPlacingPieceAt(p, i.second.first, i.second.second, depth - 1, alpha, beta, bestValue, valueSoFar);
-
-
-        //board.playerOnMove = oppositeSide(board.playerOnMove);
-        board.pieceAt(column, row) = p;
+            tryPlacingPieceAt(p, i.second.first, i.second.second, depth - 1, alpha, beta, bestValue, valueSoFar - priceAdjustmentPov(p, column, row) * board.playerOnMove);
 
         return bestValue;
     }
@@ -1985,7 +1867,7 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
 static auto rd = std::random_device{};
 static auto rng = std::default_random_engine{ rd() };
 
-stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 150>& playedPositions)//, i8 depth = 1
+stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)//, i8 depth = 1
 {
     alphaOrBeta = std::numeric_limits<float>::max() * board.playerOnMove;
     const i8 depth = 1;
@@ -2017,7 +1899,7 @@ stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerS
         if (std::find(playedPositions.begin(), playedPositions.end(), pos.first.board) != playedPositions.end()) [[unlikely]]
         {
             res.emplace_back(pos.first, 0, 0, 0, pos.first.playerOnMove, pos.first.findDiff(board));
-            debugOut << "Deja vu! Found a possible move that results in an already played position. Assigning a value of a draw." << std::endl;
+            debugOut << "Deja vu! Found a possible move that results in an already played position: " << res.back().firstMoveNotation <<". Assigning a value of a draw." << std::endl;
         }
         else [[likely]]
             res.emplace_back(pos.first, pos.second, pos.second, depth, pos.first.playerOnMove, pos.first.findDiff(board));
@@ -2278,7 +2160,7 @@ std::string_view getWord(std::string_view& str)
     return res;
 }
 
-void executeMove(GameState& board, std::string_view& str, stack_vector<std::array<Piece, 64>,150>& playedPositions)
+void executeMove(GameState& board, std::string_view& str, stack_vector<std::array<Piece, 64>,75>& playedPositionsWhite, stack_vector<std::array<Piece, 64>, 75>& playedPositionsBlack)
 {
     auto move = getWord(str);
 
@@ -2286,12 +2168,17 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
     if (backup == Piece::Nothing && toGenericPiece(board.pieceAt(move[0], move[1])) != PieceGeneric::Pawn)
     {
         board.repeatableMoves += 1;
-        playedPositions.push_back(board.board);
+
+        if (board.playerOnMove == PlayerSide::WHITE)
+            playedPositionsWhite.push_back(board.board);
+        else
+            playedPositionsBlack.push_back(board.board);
     }
     else
     {
         board.repeatableMoves = 0;
-        playedPositions.clear();
+        playedPositionsWhite.clear();
+        playedPositionsBlack.clear();
     }
 
     board.movePiece(move[0], move[1], move[2], move[3]);
@@ -2334,14 +2221,14 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
         case('1'):
         {
             //White moves king
-            board.canCastleLeft[index(PlayerSide::WHITE)] = false;
-            board.canCastleRight[index(PlayerSide::WHITE)] = false;
+            board.canCastle[0][index(PlayerSide::WHITE)] = false;
+            board.canCastle[1][index(PlayerSide::WHITE)] = false;
         } break;
         case('8'):
         {
             //Black moves king
-            board.canCastleLeft[index(PlayerSide::BLACK)] = false;
-            board.canCastleRight[index(PlayerSide::BLACK)] = false;
+            board.canCastle[0][index(PlayerSide::BLACK)] = false;
+            board.canCastle[1][index(PlayerSide::BLACK)] = false;
         } break;
         default:
             break;
@@ -2351,10 +2238,10 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
         switch (move[1])
         {
         case('1'): {
-            board.canCastleLeft[index(PlayerSide::WHITE)] = false;//White moves left rook
+            board.canCastle[0][index(PlayerSide::WHITE)] = false;//White moves left rook
         } break;
         case('8'): {
-            board.canCastleLeft[index(PlayerSide::BLACK)] = false;//Black moves left rook
+            board.canCastle[0][index(PlayerSide::BLACK)] = false;//Black moves left rook
         } break;
         default:
             break;
@@ -2364,10 +2251,10 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
         switch (move[1])
         {
         case ('1'): {
-            board.canCastleRight[index(PlayerSide::WHITE)] = false;//White moves right rook
+            board.canCastle[1][index(PlayerSide::WHITE)] = false;//White moves right rook
         } break;
         case ('8'): {
-            board.canCastleRight[index(PlayerSide::BLACK)] = false;//Black moves right rook
+            board.canCastle[1][index(PlayerSide::BLACK)] = false;//Black moves right rook
         } break;
         default:
             break;
@@ -2381,20 +2268,28 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
     board.playerOnMove = oppositeSide(board.playerOnMove);
 }
 
-void parseMoves(GameState& board, std::string_view str, stack_vector<std::array<Piece, 64>, 150>& playedPositions)
+void parseMoves(GameState& board, std::string_view str, stack_vector<std::array<Piece, 64>, 75>& playedPositions)
 {
     if (getWord(str) != "moves")
         return;
 
+    stack_vector<std::array<Piece, 64>, 75> playedPositionsWhite;
+    stack_vector<std::array<Piece, 64>, 75> playedPositionsBlack;
+
     while (!str.empty())
     {
-        executeMove(board, str, playedPositions);
+        executeMove(board, str, playedPositionsWhite, playedPositionsBlack);
     }
+
+    if (board.playerOnMove == PlayerSide::WHITE)
+        playedPositions = std::move(playedPositionsBlack);
+    else
+        playedPositions = std::move(playedPositionsWhite);
 }
 
 
 
-GameState posFromString(std::string_view str, stack_vector<std::array<Piece, 64>, 150>& playedPositions)
+GameState posFromString(std::string_view str, stack_vector<std::array<Piece, 64>, 75>& playedPositions)
 {
     if (getWord(str) == "startpos") [[likely]]
     {
@@ -2470,7 +2365,7 @@ duration_t predictTime(const duration_t& olderTime, const duration_t& newerTime,
     return projectedNextTime;
 }
 
-void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, size_t maxDepth, const stack_vector<std::array<Piece, 64>, 150>& playedPositions)
+void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, size_t maxDepth, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)
 {
     std::unique_lock l(uciGoM);
     timeGlobalStarted = std::chrono::high_resolution_clock::now();
@@ -2825,7 +2720,7 @@ int uci(std::istream& in, std::ostream& output)
         //{
         //    out << "readyok" << std::endl;
     GameState board;
-    stack_vector<std::array<Piece, 64>, 150> playedPositions;
+    stack_vector<std::array<Piece, 64>, 75> playedPositions;
     //std::ofstream debugOut("debug.log");
 
     while (true)
