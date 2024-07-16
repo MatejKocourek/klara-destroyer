@@ -853,9 +853,16 @@ static stack_vector<std::pair<GameState, float>, maxMoves> firstPositions;
 
 template <bool saveToVector = false>
 struct Variation {
-    GameState board;
+    size_t nodes = 0;
+
+    duration_t time = duration_t(0);
     float bestFoundValue;
     float startingValue;
+
+    GameState board;
+
+    bool pruned = false;
+
     i8 variationDepth;
 
     PlayerSide firstMoveOnMove;
@@ -863,12 +870,8 @@ struct Variation {
 
     //std::unordered_map<GameState, float, BoardHasher> transpositions;
 
-    size_t nodes = 0;
 
-    duration_t time = duration_t(0);
-
-
-    Variation() = default;
+    Variation() noexcept = default;
     Variation(const Variation& copy) noexcept = default;//:researchedBoard(copy.researchedBoard),bestFoundValue(copy.bestFoundValue),pieceTakenValue(copy.pieceTakenValue){}
     Variation(Variation&& toMove) noexcept = default;// :researchedBoard(move(toMove.researchedBoard)), bestFoundValue(toMove.bestFoundValue), pieceTakenValue(toMove.pieceTakenValue) {}
 
@@ -1107,10 +1110,18 @@ struct Variation {
                     switch (board.playerOnMove)
                     {
                     case PlayerSide::WHITE: {
-                        beta = alphaOrBeta;
+                        if (beta != alphaOrBeta)
+                        {
+                            beta = alphaOrBeta;
+                            pruned = true;
+                        }
                     } break;
                     case PlayerSide::BLACK: {
-                        alpha = alphaOrBeta;
+                        if (alpha != alphaOrBeta)
+                        {
+                            alpha = alphaOrBeta;
+                            pruned = true;
+                        }
                     } break;
                     default:
                         std::unreachable();
@@ -1672,13 +1683,17 @@ auto evaluateGameMove(Variation<> localBoard)//, double alpha = -std::numeric_li
         }
         else
         {
+            float localAlphaBeta = alphaOrBeta;
+            if (abs(localAlphaBeta) != pricePiece(PieceGeneric::King))
+                localBoard.pruned = true;
+
             switch (localBoard.board.playerOnMove)
             {
             case PlayerSide::BLACK: {
-                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, alphaOrBeta, pricePiece(PieceGeneric::King));
+                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, localAlphaBeta, pricePiece(PieceGeneric::King));
             } break;
             case PlayerSide::WHITE: {
-                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -pricePiece(PieceGeneric::King), alphaOrBeta);
+                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -pricePiece(PieceGeneric::King), localAlphaBeta);
             } break;
             default:
                 std::unreachable();
@@ -1750,6 +1765,7 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
 
             if (bestMove == nullptr || board.bestFoundValue * board.board.playerOnMove < (bestMove->bestFoundValue * board.board.playerOnMove))
             {
+                board.pruned = false;
                 bestMove = &board;
 
                 if (options.Verbosity >= 4)
@@ -1842,7 +1858,7 @@ bool cutoffBadMoves(stack_vector<Variation<>,maxMoves>& boards, float cutoffPoin
 
 
 
-void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duration_t& elapsedDepth, const size_t& nodesDepth, const Variation<>& move, size_t moveRank, bool upperbound, PlayerSide pov)
+void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duration_t& elapsedDepth, const size_t& nodesDepth, const Variation<>& move, size_t moveRank, PlayerSide pov)
 {
     const auto secondsPassed = std::chrono::duration_cast<std::chrono::duration<double>>(elapsedDepth);
     out
@@ -1856,7 +1872,7 @@ void printMoveInfo(unsigned depth, const duration_t& elapsedTotal, const duratio
         << "nps " << (size_t)round(nodesDepth / secondsPassed.count())<< ' '
         ;
     printScore(out, move.bestFoundValue, depth, pov) << ' ';
-    if (upperbound)
+    if (move.pruned)
         out << "upperbound ";
     out
         << "multipv " << moveRank << ' '
@@ -1869,7 +1885,7 @@ static auto rng = std::default_random_engine{ rd() };
 
 stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)//, i8 depth = 1
 {
-    alphaOrBeta = std::numeric_limits<float>::max() * board.playerOnMove;
+    alphaOrBeta = pricePiece(PieceGeneric::King) * board.playerOnMove;
     const i8 depth = 1;
     criticalTimeDepleted = false;
     onMoveW = board.playerOnMove;
@@ -1963,11 +1979,11 @@ stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerS
     if (options.Verbosity >= 5)
     {
         for (size_t i = res.size() - 1; i != 0; --i)
-            printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[i], i + 1, false, bestForWhichSide);
+            printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[i], i + 1, bestForWhichSide);
     }
     if (options.Verbosity >= 1)
     {
-        printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[0], 1, false, bestForWhichSide);
+        printMoveInfo(depth, elapsedTotal, elapsedTotal, tmp.nodes, res[0], 1, bestForWhichSide);
     }
 
     std::cout << std::flush;
@@ -2001,7 +2017,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
     auto timeThisStarted = std::chrono::high_resolution_clock::now();
     if (depth > 0)
     {
-        alphaOrBeta = std::numeric_limits<float>::max() * onMoveResearched;
+        alphaOrBeta = pricePiece(PieceGeneric::King) * onMoveResearched;
         //lastReportedLowerBound = alphaOrBeta;
         //transpositions.clear();
 
@@ -2047,38 +2063,13 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
         }
 
         //Add the rest of the boards that finished computation without changing the order
-        for (auto& i : boards)
+        for (auto&& i : boards)
         {
             if (&i != bestMove && i.time != static_cast<duration_t>(std::numeric_limits<double>::infinity()))
                 resultBoards.push_back(std::move(i));
             //else
               //  debugOut << "board " << i.firstMoveNotation << " has value of infinity" << std::endl;
         }
-
-        //Shuffle best results if required and best result is not draw
-        if (!firstLevelPruning && resultBoards.size() > 2)
-        {
-            if (shuffle && bestMove->bestFoundValue != 0.0f)
-            {
-                std::shuffle(resultBoards.begin(), resultBoards.end(), rng);
-            }
-
-            //Sort only if we know the real value of all boards (no first level pruning)
-            switch (onMoveResearched)
-            {
-            case PlayerSide::WHITE: {
-                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::less<Variation<>>());
-            } break;
-            case PlayerSide::BLACK: {
-                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::greater<Variation<>>());
-            } break;
-            default:
-                std::unreachable();
-            }
-        }
-
-        //q.clear();
-        //transpositions.clear();
 
         if (resultBoards.size() == availableMoves)
         {
@@ -2092,7 +2083,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
             {
                 if (oldBestMove == i.firstMoveNotation)
                 {
-                    debugOut << "Time ran out, but the engine at least managed to include the supposed best move in the results. Returning results."<<std::endl;
+                    debugOut << "Time ran out, but the engine at least managed to include the supposed best move in the results. Returning results." << std::endl;
                     goto bestMoveFound;
                 }
             }
@@ -2101,7 +2092,45 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
 
         }
     bestMoveFound:
-        
+
+        //Determine if pruning caused some upperbound results (we cannot calculate with them the same way)
+        bool noUpperboundResults = true;
+        for (const auto& i : resultBoards)
+        {
+            if (i.pruned)
+            {
+                noUpperboundResults = false;
+                break;
+            }
+        }
+
+        if (noUpperboundResults)
+            debugOut << "All board evaluations are exact, performing sorting/shuffling!" << std::endl;
+        else
+            debugOut << "Some board evalutions are upper bound only, sorting/shuffling not possible." << std::endl;
+
+
+        //Shuffle best results if required and best result is not a draw
+        if (noUpperboundResults && resultBoards.size() > 2)
+        {
+            if (shuffle && bestMove->bestFoundValue != 0.0f)
+            {
+                std::shuffle(resultBoards.begin(), resultBoards.end(), rng);
+            }
+
+            //Sort only if we know the real value of all boards (no first level pruning occured)
+            switch (onMoveResearched)
+            {
+            case PlayerSide::WHITE: {
+                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::less<Variation<>>());
+            } break;
+            case PlayerSide::BLACK: {
+                std::stable_sort(resultBoards.begin(), resultBoards.end(), std::greater<Variation<>>());
+            } break;
+            default:
+                std::unreachable();
+            }
+        }
 
         for (const auto& i : resultBoards)
             totalNodesDepth += i.nodes;
@@ -2122,12 +2151,12 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
     if (options.Verbosity >= 6 || options.MultiPV > 1)
     {
         for (size_t i = boards.size() - 1; i != 0; --i)
-            printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, firstLevelPruning, oppositeSide(onMoveW));
+            printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards[i], i + 1, oppositeSide(onMoveW));
     }
 
     if (options.Verbosity >= 1) //TODO: make it available to print later for the last depth if verbosity is set to 1, do not print every time unless >= 2.
     {
-        printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards.front(), 1, false, oppositeSide(onMoveW));
+        printMoveInfo(depth + 1, elapsedTotal, elapsedThis, totalNodesDepth, boards.front(), 1, oppositeSide(onMoveW));
         std::cout << std::flush;
     }
 
