@@ -217,6 +217,7 @@ struct Options {
     size_t MultiPV;
     size_t Threads;
     size_t Verbosity;
+    bool UCI_Chess960;
 } options;
 
 bool firstLevelPruning = true;
@@ -298,29 +299,29 @@ constexpr char symbolA(Piece p)
     case Piece::Nothing:
         return ' ';
     case Piece::PawnWhite:
-        return 'p';
-    case Piece::KnightWhite:
-        return 'n';
-    case Piece::BishopWhite:
-        return 'b';
-    case Piece::RookWhite:
-        return 'r';
-    case Piece::QueenWhite:
-        return 'q';
-    case Piece::KingWhite:
-        return 'k';
-    case Piece::PawnBlack:
         return 'P';
-    case Piece::KnightBlack:
+    case Piece::KnightWhite:
         return 'N';
-    case Piece::BishopBlack:
+    case Piece::BishopWhite:
         return 'B';
-    case Piece::RookBlack:
+    case Piece::RookWhite:
         return 'R';
-    case Piece::QueenBlack:
+    case Piece::QueenWhite:
         return 'Q';
-    case Piece::KingBlack:
+    case Piece::KingWhite:
         return 'K';
+    case Piece::PawnBlack:
+        return 'p';
+    case Piece::KnightBlack:
+        return 'n';
+    case Piece::BishopBlack:
+        return 'b';
+    case Piece::RookBlack:
+        return 'r';
+    case Piece::QueenBlack:
+        return 'q';
+    case Piece::KingBlack:
+        return 'k';
     default:
         std::unreachable();
     }
@@ -348,6 +349,41 @@ constexpr char symbolA(PieceGeneric p)
     }
 }
 
+constexpr Piece fromSymbol(char a)
+{
+    switch (a)
+    {
+    case ' ':
+        return Piece::Nothing;
+    case 'P':
+        return Piece::PawnWhite;
+    case 'N':
+        return Piece::KnightWhite;
+    case 'B':
+        return Piece::BishopWhite;
+    case 'R':
+        return Piece::RookWhite;
+    case 'Q':
+        return Piece::QueenWhite;
+    case 'K':
+        return Piece::KingWhite;
+    case 'p':
+        return Piece::PawnBlack;
+    case 'n':
+        return Piece::KnightBlack;
+    case 'b':
+        return Piece::BishopBlack;
+    case 'r':
+        return Piece::RookBlack;
+    case 'q':
+        return Piece::QueenBlack;
+    case 'k':
+        return Piece::KingBlack;
+    default:
+        std::unreachable();
+    }
+}
+
 constexpr PieceGeneric fromGenericSymbol(char a)
 {
     switch (a)
@@ -367,7 +403,7 @@ constexpr PieceGeneric fromGenericSymbol(char a)
     case 'k':
         return PieceGeneric::King;
     default:
-        AssertAssume(false);
+        std::unreachable();
     }
 }
 
@@ -2011,6 +2047,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
             }
 
         i.time = static_cast<duration_t>(std::numeric_limits<double>::infinity()); //To know which failed to finish
+        i.pruned = false;
     }
 
 
@@ -2225,7 +2262,7 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
     //Pawn promotion
     else if (move.size() == 5)
     {
-        char promotionChar = tolower(move[4]);
+        char promotionChar = toupper(move[4]);
         Piece evolvedInto = fromGenericPiece(fromGenericSymbol(promotionChar), board.playerOnMove);
         board.pieceAt(move[2], move[3]) = evolvedInto;
     }
@@ -2316,22 +2353,164 @@ void parseMoves(GameState& board, std::string_view str, stack_vector<std::array<
         playedPositions = std::move(playedPositionsWhite);
 }
 
+GameState posFromFen(std::string_view& fen)
+{
+    GameState res;
 
+    size_t i = 0;
+    // Position
+    {
+        size_t pos = 64-8;
+        while (fen[i] != ' ')
+        {
+            char c = fen[i++];
+
+            if (c == '/')
+            {
+                assert(pos % 8 == 0); // Invalid fen string
+                pos -= 16;
+            }
+            else if (isdigit(c))
+            {
+                pos += c - '0'; // This many fields are empty
+            }
+            else
+            {
+                assert(pos < 64);
+                res.board[pos++] = fromSymbol(c);
+            }
+        }
+        assert(pos == 8);
+    }
+
+    // Space
+    assert(fen[i] == ' ');
+    ++i;
+
+    // Active color
+    switch (fen[i++])
+    {
+    case 'w':
+        res.playerOnMove = PlayerSide::WHITE;
+        break;
+    case 'b':
+        res.playerOnMove = PlayerSide::BLACK;
+        break;
+    default:
+        std::unreachable();
+    }
+
+    // Space
+    assert(fen[i] == ' ');
+    ++i;
+
+    // Castling
+    res.canCastle = { {{false,false},{false,false}} };
+    if (fen[i] != '-')
+    {
+        while (fen[i] != ' ')
+        {
+            switch (fen[i++])
+            {
+            case 'K':
+                res.canCastle[1][1] = true;
+                break;
+            case 'Q':
+                res.canCastle[0][1] = true;
+                break;
+            case 'k':
+                res.canCastle[1][0] = true;
+                break;
+            case 'q':
+                res.canCastle[0][0] = true;
+                break;
+            default:
+                if (options.UCI_Chess960)
+                {
+                    //TODO
+                }
+                else
+                    std::unreachable();
+                break;
+            }
+        }
+    }
+    else
+        ++i;
+    static_assert(index(PlayerSide::BLACK) == 0 && index(PlayerSide::WHITE) == 1); // We are assuming this in the array above
+
+    // Space
+    assert(fen[i] == ' ');
+    ++i;
+
+    // En passant
+    if (fen[i] != '-')
+    {
+        char column = fen[i++];
+        char row = fen[i++];
+
+        // En passant not implemented, TODO
+    }
+    else
+        ++i;
+
+    // Space
+    assert(fen[i] == ' ');
+    ++i;
+
+    // Halfmove clock
+
+    res.repeatableMoves = 0;
+
+    while (fen[i] != ' ')
+    {
+        res.repeatableMoves *= 10;
+        res.repeatableMoves += (fen[i++] - '0');
+    }
+
+    // Space
+    assert(fen[i] == ' ');
+    ++i;
+
+    // Fullmove clock
+
+    i32 fullMoves = 0;
+
+    while (i<fen.size() && fen[i++] != ' ')
+    {
+        fullMoves *= 10;
+        fullMoves += (fen[i] - '0') * 10;
+    }
+
+    fen = fen.substr(i);
+    return res;
+}
 
 GameState posFromString(std::string_view str, stack_vector<std::array<Piece, 64>, 75>& playedPositions)
 {
-    if (getWord(str) == "startpos") [[likely]]
+    std::optional<GameState> res;
+    auto word = getWord(str);
+    if (word == "startpos") [[likely]]
     {
-        GameState res = GameState::startingPosition();
-        parseMoves(res, str, playedPositions);
+        res.emplace(GameState::startingPosition());
+    }
+    else if (word == "fen")
+    {
+        res.emplace(posFromFen(str));
+
+        //assert(str[0] == ' ');
+        //str = str.substr(1);
+    }
+    else
+        std::unreachable();
+
+    parseMoves(*res, str, playedPositions);
 
 #ifdef _DEBUG
-        res.print(debugOut);
+    res->print(debugOut);
 #endif
-        return res;
-    }
-    throw;//not implemented
 
+    return *res;
 }
 
 Variation<> findBestInNumberOfMoves(GameState& board, i8 moves)
@@ -2780,6 +2959,7 @@ int uci(std::istream& in, std::ostream& output)
                 options.Threads = std::max(std::thread::hardware_concurrency() / 2, 1u);
                 options.Verbosity = 3;
 #endif
+                options.UCI_Chess960 = false;
             }
 
             if (threadWorkers.size() != options.Threads)
@@ -2790,6 +2970,7 @@ int uci(std::istream& in, std::ostream& output)
                 << "option name MultiPV type spin min 1 max 218 default " << options.MultiPV << nl
                 << "option name Threads type spin min 1 max 255 default " << options.Threads << nl
                 << "option name Verbosity type spin min 0 max 7 default " << options.Verbosity << nl
+                //<< "option name UCI_Chess960 type check default false" << nl
                 << "uciok" << nl
                 << std::flush;
         }
@@ -2842,6 +3023,11 @@ int uci(std::istream& in, std::ostream& output)
                 //debugOut << "Option value was: " << optionValue << std::endl;
                 options.Verbosity = std::atoll(optionValue.data());
                 debugOut << "Setting Verbosity to " << options.Verbosity << std::endl;
+            }
+            else if (optionName == "UCI_Chess960")
+            {
+                options.UCI_Chess960 = (optionValue == "true");
+                debugOut << "Setting UCI_Chess960 to " << options.UCI_Chess960 << std::endl;
             }
             else
             {
