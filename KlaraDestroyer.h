@@ -952,7 +952,7 @@ struct Variation {
                 continue;
             if (pieceColor(found) == onMove)
             {
-                auto foundVal = thisHack->bestMoveWithThisPieceScore((i % 8), (i / 8), 1, alpha, beta, 0);
+                auto foundVal = thisHack->bestMoveWithThisPieceScore((i % 8), (i / 8), 0, alpha, beta, 0);
 
                 if (foundVal * onMove == pricePiece(PieceGeneric::King)) [[unlikely]]//Je možné vzít krále, hra skončila
                     {
@@ -1023,7 +1023,7 @@ struct Variation {
                 continue;
             if (pieceColor(found) == onMove)
             {
-                auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), 1, alpha, beta, 0);
+                auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), 0, alpha, beta, 0);
 
                 if (foundVal != std::numeric_limits<float>::infinity() * (-1) * onMove)
                     return true;
@@ -1110,7 +1110,7 @@ struct Variation {
                 if (found == Piece::Nothing)
                     continue;
                 if (pieceColor(found) == board.playerOnMove)
-                    possiblePiecesToMove.emplace_back(bestMoveWithThisPieceScore(i % 8, i / 8, 0, alphaTmp, betaTmp, valueSoFar), i);
+                    possiblePiecesToMove.emplace_back(bestMoveWithThisPieceScore(i % 8, i / 8, -1, alphaTmp, betaTmp, valueSoFar), i);
             }
 
             switch (board.playerOnMove)
@@ -1131,11 +1131,11 @@ struct Variation {
                 float foundVal;
                 if (depth > depthToStopOrderingMoves) [[unlikely]]
                 {
-                    foundVal = bestMoveWithThisPieceScoreOrdered((i % 8), (i / 8), depth, alpha, beta, valueSoFar);
+                    foundVal = bestMoveWithThisPieceScoreOrdered((i % 8), (i / 8), depth - 1, alpha, beta, valueSoFar);
                 }
                 else
                 {
-                    foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), depth, alpha, beta, valueSoFar);
+                    foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), depth - 1, alpha, beta, valueSoFar);
                 }
 
                 //assert(variationDepth == depthW);
@@ -1193,7 +1193,7 @@ struct Variation {
                     continue;
                 if (pieceColor(found) == board.playerOnMove)
                 {
-                    auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), depth, alpha, beta, valueSoFar);
+                    auto foundVal = bestMoveWithThisPieceScore((i % 8), (i / 8), depth - 1, alpha, beta, valueSoFar);
 
                     if (foundVal * board.playerOnMove > bestValue * board.playerOnMove) {
                         bestValue = foundVal;
@@ -1424,142 +1424,139 @@ struct Variation {
 
         Piece p = board.pieceAt(column, row);
         PieceGeneric piece = toGenericPiece(p);
-        PlayerSide color = pieceColor(p);
 
-        assert(color == board.playerOnMove);
-        if (color == board.playerOnMove)
+        AssertAssume(pieceColor(p) == board.playerOnMove);
+
+        board.pieceAt(column, row) = Piece::Nothing;
+        valueSoFar -= priceAdjustmentPov(p, column, row) * board.playerOnMove;//We are leaving our current position
+        //board.playerOnMove = oppositeSide(board.playerOnMove);
+
+        switch (piece)
         {
-            board.pieceAt(column, row) = Piece::Nothing;
-            valueSoFar -= priceAdjustmentPov(p, column, row) * board.playerOnMove;//We are leaving our current position
-            //board.playerOnMove = oppositeSide(board.playerOnMove);
-
-            switch (piece)
+        case PieceGeneric::Nothing:
+            break;
+        case PieceGeneric::Pawn:
+        {
+            if (row + playerDirection(board.playerOnMove) == promoteRow(board.playerOnMove)) [[unlikely]]
             {
-            case PieceGeneric::Nothing:
-                break;
-            case PieceGeneric::Pawn:
-            {
-                if (row + playerDirection(board.playerOnMove) == promoteRow(board.playerOnMove)) [[unlikely]]
-                {
-                    const auto& availableOptions = availablePromotes(p);
-                    for (const auto& evolveOption : availableOptions) {
-                        float valueDifferenceNextMove = (pricePiece(evolveOption) - pricePiece(piece)) * board.playerOnMove;//Increase in material when the pawn promotes
-                        float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
+                const auto& availableOptions = availablePromotes(p);
+                for (const auto& evolveOption : availableOptions) {
+                    float valueDifferenceNextMove = (pricePiece(evolveOption) - pricePiece(piece)) * board.playerOnMove;//Increase in material when the pawn promotes
+                    float valueSoFarEvolved = valueSoFar + valueDifferenceNextMove;
 
-                        //Capture diagonally
-                        tryPlacingPieceAt(evolveOption, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-                        tryPlacingPieceAt(evolveOption, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
-
-                        //Go forward
-                        tryPlacingPieceAt(evolveOption, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
-                    }
-                }
-                else [[likely]]
-                {
                     //Capture diagonally
-                    tryPlacingPieceAt(p, column - 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
-                    tryPlacingPieceAt(p, column + 1, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+                    tryPlacingPieceAt(evolveOption, column - 1, row + playerDirection(board.playerOnMove), depth, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
+                    tryPlacingPieceAt(evolveOption, column + 1, row + playerDirection(board.playerOnMove), depth, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_CAPTURE_ONLY);
 
                     //Go forward
-
-                    //First, try two fields forward (if possible) since it is usually the better option
-                    if (row == initialRow(p) && board.pieceAt(column, row + playerDirection(board.playerOnMove)) == Piece::Nothing)
-                        tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove) * 2, depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
-
-                    //Try one field forward
-                    tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove), depth - 1, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+                    tryPlacingPieceAt(evolveOption, column, row + playerDirection(board.playerOnMove), depth, alpha, beta, bestValue, valueSoFarEvolved, MOVE_PIECE_FREE_ONLY);
                 }
-
-            } break;
-            case PieceGeneric::Knight:
+            }
+            else [[likely]]
             {
-                tryPlacingPieceAt(p, column + 1, row + 2, depth - 1, alpha, beta, bestValue, valueSoFar);
-                tryPlacingPieceAt(p, column + 1, row - 2, depth - 1, alpha, beta, bestValue, valueSoFar);
-                tryPlacingPieceAt(p, column + 2, row + 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                tryPlacingPieceAt(p, column + 2, row - 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                tryPlacingPieceAt(p, column - 1, row + 2, depth - 1, alpha, beta, bestValue, valueSoFar);
-                tryPlacingPieceAt(p, column - 1, row - 2, depth - 1, alpha, beta, bestValue, valueSoFar);
-                tryPlacingPieceAt(p, column - 2, row + 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                tryPlacingPieceAt(p, column - 2, row - 1, depth - 1, alpha, beta, bestValue, valueSoFar);
+                //Capture diagonally
+                tryPlacingPieceAt(p, column - 1, row + playerDirection(board.playerOnMove), depth, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
+                tryPlacingPieceAt(p, column + 1, row + playerDirection(board.playerOnMove), depth, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_CAPTURE_ONLY);
 
-            } break;
-            case PieceGeneric::Bishop:
-            {
-                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row + i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row - i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-            } break;
-            case PieceGeneric::Rook:
-            {
-                std::optional<TempSwap<bool>> castleBackup;
+                //Go forward
 
-                assert(column <= 7 && column >= 0);
+                //First, try two fields forward (if possible) since it is usually the better option
+                if (row == initialRow(p) && board.pieceAt(column, row + playerDirection(board.playerOnMove)) == Piece::Nothing)
+                    tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove) * 2, depth, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
 
-                if (initialRow(p) == row && column % 7 == 0)
-                    castleBackup.emplace(board.canCastle[column / 7][index(board.playerOnMove)], false);
+                //Try one field forward
+                tryPlacingPieceAt(p, column, row + playerDirection(board.playerOnMove), depth, alpha, beta, bestValue, valueSoFar, MOVE_PIECE_FREE_ONLY);
+            }
 
-                for (i8 i = 1; tryPlacingPieceAt(p, column, row + i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column, row - i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
+        } break;
+        case PieceGeneric::Knight:
+        {
+            tryPlacingPieceAt(p, column + 1, row + 2, depth, alpha, beta, bestValue, valueSoFar);
+            tryPlacingPieceAt(p, column + 1, row - 2, depth, alpha, beta, bestValue, valueSoFar);
+            tryPlacingPieceAt(p, column + 2, row + 1, depth, alpha, beta, bestValue, valueSoFar);
+            tryPlacingPieceAt(p, column + 2, row - 1, depth, alpha, beta, bestValue, valueSoFar);
+            tryPlacingPieceAt(p, column - 1, row + 2, depth, alpha, beta, bestValue, valueSoFar);
+            tryPlacingPieceAt(p, column - 1, row - 2, depth, alpha, beta, bestValue, valueSoFar);
+            tryPlacingPieceAt(p, column - 2, row + 1, depth, alpha, beta, bestValue, valueSoFar);
+            tryPlacingPieceAt(p, column - 2, row - 1, depth, alpha, beta, bestValue, valueSoFar);
 
-            } break;
-            case PieceGeneric::Queen:
-            {
-                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row + i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row - i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
+        } break;
+        case PieceGeneric::Bishop:
+        {
+            for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column - i, row + i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column - i, row - i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+        } break;
+        case PieceGeneric::Rook:
+        {
+            std::optional<TempSwap<bool>> castleBackup;
 
-                for (i8 i = 1; tryPlacingPieceAt(p, column, row + i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column, row - i, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column + i, row, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
-                for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth - 1, alpha, beta, bestValue, valueSoFar); ++i);
+            assert(column <= 7 && column >= 0);
 
-            } break;
-            case PieceGeneric::King:
-            {
-                bool& canICastleLeft = board.canCastle[0][index(board.playerOnMove)];
-                bool& canICastleRight = board.canCastle[1][index(board.playerOnMove)];
+            if (initialRow(p) == row && column % 7 == 0)
+                castleBackup.emplace(board.canCastle[column / 7][index(board.playerOnMove)], false);
+
+            for (i8 i = 1; tryPlacingPieceAt(p, column, row + i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column, row - i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column + i, row, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth, alpha, beta, bestValue, valueSoFar); ++i);
+
+        } break;
+        case PieceGeneric::Queen:
+        {
+            for (i8 i = 1; tryPlacingPieceAt(p, column + i, row + i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column + i, row - i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column - i, row + i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column - i, row - i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+
+            for (i8 i = 1; tryPlacingPieceAt(p, column, row + i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column, row - i, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column + i, row, depth, alpha, beta, bestValue, valueSoFar); ++i);
+            for (i8 i = 1; tryPlacingPieceAt(p, column - i, row, depth, alpha, beta, bestValue, valueSoFar); ++i);
+
+        } break;
+        case PieceGeneric::King:
+        {
+            bool& canICastleLeft = board.canCastle[0][index(board.playerOnMove)];
+            bool& canICastleRight = board.canCastle[1][index(board.playerOnMove)];
 
 
 #ifndef CASTLING_DISABLED
-                if (canICastleLeft)//Neither has moved
-                {
-                    AssertAssume(column == 4);//King has to be in initial position
-                    AssertAssume(row == 0 || row == 7);
-                    tryCastling<0, 3>(p, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, valueSoFar);
-                }
-                if (canICastleRight)//Neither has moved
-                {
-                    AssertAssume(column == 4);//King has to be in initial position
-                    AssertAssume(row == 0 || row == 7);
-                    tryCastling<7, 5>(p, row, canICastleLeft, canICastleRight, bestValue, depth, alpha, beta, valueSoFar);
-                }
+            if (canICastleLeft)//Neither has moved
+            {
+                AssertAssume(column == 4);//King has to be in initial position
+                AssertAssume(row == 0 || row == 7);
+                tryCastling<0, 3>(p, row, canICastleLeft, canICastleRight, bestValue, depth + 1, alpha, beta, valueSoFar);
+            }
+            if (canICastleRight)//Neither has moved
+            {
+                AssertAssume(column == 4);//King has to be in initial position
+                AssertAssume(row == 0 || row == 7);
+                tryCastling<7, 5>(p, row, canICastleLeft, canICastleRight, bestValue, depth + 1, alpha, beta, valueSoFar);
+            }
 #endif
 
-                //Classic king movement
-                {
-                    TempSwap castleLeftBackup(canICastleLeft, false);
-                    TempSwap castleRightBackup(canICastleRight, false);
+            //Classic king movement
+            {
+                TempSwap castleLeftBackup(canICastleLeft, false);
+                TempSwap castleRightBackup(canICastleRight, false);
 
-                    tryPlacingPieceAt(p, column + 1, row + 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                    tryPlacingPieceAt(p, column + 1, row, depth - 1, alpha, beta, bestValue, valueSoFar);
-                    tryPlacingPieceAt(p, column + 1, row - 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                    tryPlacingPieceAt(p, column - 1, row + 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                    tryPlacingPieceAt(p, column - 1, row, depth - 1, alpha, beta, bestValue, valueSoFar);
-                    tryPlacingPieceAt(p, column - 1, row - 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                    tryPlacingPieceAt(p, column, row + 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                    tryPlacingPieceAt(p, column, row - 1, depth - 1, alpha, beta, bestValue, valueSoFar);
-                }
-            } break;
-            default:
-                std::unreachable();
+                tryPlacingPieceAt(p, column + 1, row + 1, depth, alpha, beta, bestValue, valueSoFar);
+                tryPlacingPieceAt(p, column + 1, row,     depth, alpha, beta, bestValue, valueSoFar);
+                tryPlacingPieceAt(p, column + 1, row - 1, depth, alpha, beta, bestValue, valueSoFar);
+                tryPlacingPieceAt(p, column - 1, row + 1, depth, alpha, beta, bestValue, valueSoFar);
+                tryPlacingPieceAt(p, column - 1, row,     depth, alpha, beta, bestValue, valueSoFar);
+                tryPlacingPieceAt(p, column - 1, row - 1, depth, alpha, beta, bestValue, valueSoFar);
+                tryPlacingPieceAt(p, column    , row + 1, depth, alpha, beta, bestValue, valueSoFar);
+                tryPlacingPieceAt(p, column    , row - 1, depth, alpha, beta, bestValue, valueSoFar);
             }
-
-            board.pieceAt(column, row) = p;
+        } break;
+        default:
+            std::unreachable();
         }
+
+        board.pieceAt(column, row) = p;
 
         return bestValue;
     }
@@ -1656,8 +1653,10 @@ struct Variation {
         TempSwap pieceBackup(board.pieceAt(column, row), Piece::Nothing);
         float bestValue = -std::numeric_limits<float>::infinity() * board.playerOnMove;
 
+        valueSoFar -= priceAdjustmentPov(p, column, row) * board.playerOnMove;//We are leaving our current position
+
         for (const auto& i : possibleMoves)
-            tryPlacingPieceAt(p, i.second.first, i.second.second, depth - 1, alpha, beta, bestValue, valueSoFar - priceAdjustmentPov(p, column, row) * board.playerOnMove);
+            tryPlacingPieceAt(p, i.second.first, i.second.second, depth, alpha, beta, bestValue, valueSoFar);
 
         return bestValue;
     }
@@ -2262,7 +2261,7 @@ void executeMove(GameState& board, std::string_view& str, stack_vector<std::arra
     //Pawn promotion
     else if (move.size() == 5)
     {
-        char promotionChar = toupper(move[4]);
+        char promotionChar = tolower(move[4]);
         Piece evolvedInto = fromGenericPiece(fromGenericSymbol(promotionChar), board.playerOnMove);
         board.pieceAt(move[2], move[3]) = evolvedInto;
     }
