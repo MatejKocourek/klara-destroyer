@@ -167,8 +167,8 @@ int main(int argc, char** argv) {
             case (5):
             {
                 constexpr auto test = GameState::startingPosition();
-                constexpr auto balance = test.balance();
-                constexpr auto counter = test.piecesCount();
+                auto balance = test.balance();//SEGFAULT!
+                constexpr auto counter = test.piecesCountA();
                 constexpr auto min = test.countPiecesMin();
             } break;
 

@@ -62,9 +62,8 @@ typedef stack_string<5> moveNotation;
 
 class GameState;
 
-//static constexpr float kingPrice = 20000;
+static constexpr float kingPrice = 20000;
 static constexpr float matePrice = 10000000;
-//static constexpr float stalePrice = 50000;
 
 static constexpr size_t maxMoves = 218;
 
@@ -185,7 +184,6 @@ constexpr inline Piece operator - (Piece piece) noexcept
 
 static std::atomic<bool> criticalTimeDepleted;
 static std::atomic<bool> optimalTimeDepleted;
-static constexpr bool dynamicPositionRanking = false;//Not needed, static ranking is faster and should be enough
 static i8 fullDepth;
 static i8 availableMoves;
 static PlayerSide onMoveW;
@@ -407,108 +405,18 @@ constexpr PieceGeneric fromGenericSymbol(char a)
     }
 }
 
+const std::array<std::array<float, 64>, 7>* pestoPhase;
+const std::array<float, 7>* piecePhase;
 
-
-constexpr float priceAdjustment(PieceGeneric p, i8 pieceIndex)
+float priceAdjustment(PieceGeneric p, i8 pieceIndex)
 {
-    //AssertAssume(column < 8 && row < 8 && column >= 0 && row >= 0);
-    switch (p)
-    {
-    case PieceGeneric::Nothing:
-        return 0;
-    case PieceGeneric::Pawn:
-    {
-        constexpr std::array<float, 64> arr = {
-0,   0,   0,   0,   0,   0,  0,   0,
-98, 134,  61,  95,  68, 126, 34, -11,
--6,   7,  26,  31,  65,  56, 25, -20,
--14,  13,   6,  21,  23,  12, 17, -23,
--27,  -2,  -5,  12,  17,   6, 10, -25,
--26,  -4,  -4, -10,   3,   3, 33, -12,
--35,  -1, -20, -23, -15,  24, 38, -22,
-  0,   0,   0,   0,   0,   0,  0,   0,
-        };
-        return arr[pieceIndex];
-    }
-    case PieceGeneric::Knight:
-    {
-        constexpr std::array<float, 64> arr = {
--167, -89, -34, -49,  61, -97, -15, -107,
- -73, -41,  72,  36,  23,  62,   7,  -17,
- -47,  60,  37,  65,  84, 129,  73,   44,
-  -9,  17,  19,  53,  37,  69,  18,   22,
- -13,   4,  16,  13,  28,  19,  21,   -8,
- -23,  -9,  12,  10,  19,  17,  25,  -16,
- -29, -53, -12,  -3,  -1,  18, -14,  -19,
--105, -21, -58, -33, -17, -28, -19,  -23,
-        };
-        return arr[pieceIndex];
-    }
-    case PieceGeneric::Bishop:
-    {
-        constexpr std::array<float, 64> arr = {
--29,   4, -82, -37, -25, -42,   7,  -8,
--26,  16, -18, -13,  30,  59,  18, -47,
--16,  37,  43,  40,  35,  50,  37,  -2,
- -4,   5,  19,  50,  37,  37,   7,  -2,
- -6,  13,  13,  26,  34,  12,  10,   4,
-  0,  15,  15,  15,  14,  27,  18,  10,
-  4,  15,  16,   0,   7,  21,  33,   1,
--33,  -3, -14, -21, -13, -12, -39, -21,
-        };
-        return arr[pieceIndex];
-    }
-    case PieceGeneric::Rook:
-    {
-        constexpr std::array<float, 64> arr = {
-32,  42,  32,  51, 63,  9,  31,  43,
-27,  32,  58,  62, 80, 67,  26,  44,
--5,  19,  26,  36, 17, 45,  61,  16,
--24, -11,   7,  26, 24, 35,  -8, -20,
--36, -26, -12,  -1,  9, -7,   6, -23,
--45, -25, -16, -17,  3,  0,  -5, -33,
--44, -16, -20,  -9, -1, 11,  -6, -71,
--19, -13,   1,  17, 16,  7, -37, -26,
-        };
-        return arr[pieceIndex];
-    }
-    case PieceGeneric::Queen:
-    {
-        constexpr std::array<float, 64> arr = {
--28,   0,  29,  12,  59,  44,  43,  45,
--24, -39,  -5,   1, -16,  57,  28,  54,
--13, -17,   7,   8,  29,  56,  47,  57,
--27, -27, -16, -16,  -1,  17,  -2,   1,
- -9, -26,  -9, -10,  -2,  -4,   3,  -3,
--14,   2, -11,  -2,  -5,   2,  14,   5,
--35,  -8,  11,   2,   8,  15,  -3,   1,
- -1, -18,  -9,  10, -15, -25, -31, -50,
-        };
-        return arr[pieceIndex];
-    }
-    case PieceGeneric::King:
-    {
-        constexpr std::array<float, 64> arr = {
--65,  23,  16, -15, -56, -34,   2,  13,
- 29,  -1, -20,  -7,  -8,  -4, -38, -29,
- -9,  24,   2, -16, -20,   6,  22, -22,
--17, -20, -12, -27, -30, -25, -14, -36,
--49,  -1, -27, -39, -46, -44, -33, -51,
--14, -14, -22, -46, -44, -30, -15, -27,
-  1,   7,  -8, -64, -43, -16,   9,   8,
--15,  36,  12, -54,   8, -28,  24,  14,
-        };
-        return arr[pieceIndex];
-    }
-    default:
-        std::unreachable();
-    }
+    return (*pestoPhase)[(i8)p][pieceIndex];
 }
 //constexpr float priceAdjustment(Piece p, i8 column, i8 row)
 //{
 //    return priceAdjustment(toGenericPiece(p), column, row);
 //}
-constexpr float priceAdjustmentPov(Piece p, i8 column, i8 row)
+float priceAdjustmentPov(Piece p, i8 column, i8 row)
 {
     if (static_cast<i8>(p) < 0)//case(PlayerSide::BLACK):
     {
@@ -520,42 +428,23 @@ constexpr float priceAdjustmentPov(Piece p, i8 column, i8 row)
     }
 }
 
-constexpr float pricePiece(PieceGeneric p)
+float pricePiece(PieceGeneric p)
 {
-    switch (p)
-    {
-    case PieceGeneric::Nothing:
-        return 0;
-    case PieceGeneric::Pawn:
-        return 82;
-    case PieceGeneric::Knight:
-        return 337;
-    case PieceGeneric::Bishop:
-        return 365;
-    case PieceGeneric::Rook:
-        return 477;
-    case PieceGeneric::Queen:
-        return 1025;
-    case PieceGeneric::King:
-        return 20000;
-    default:
-        std::unreachable();
-    }
-    std::unreachable();
+    return (*piecePhase)[(i8)p];
 }
 
-constexpr float pricePiece(Piece p)
+float pricePiece(Piece p)
 {
     return pricePiece(toGenericPiece(p));
 }
 
-constexpr float priceAbsolute(Piece p, i8 column, i8 row)
+float priceAbsolute(Piece p, i8 column, i8 row)
 {
     auto res = pricePiece(p) + priceAdjustmentPov(p, column, row);
     AssertAssume(res >= 0);
     return res;
 }
-constexpr float priceRelative(Piece p, i8 column, i8 row)
+float priceRelative(Piece p, i8 column, i8 row)
 {
     return priceAbsolute(p, column, row) * pieceColor(p);
 }
@@ -616,35 +505,6 @@ constexpr std::array<Piece, 4> availablePromotes(Piece p)
     return evolveLastRow[index((PlayerSide)p)];
 }
 
-/*
-    switch (p)
-    {
-    case Nothing: {
-        return
-    } break;
-    case Pawn: {
-
-    } break;
-    case Knight: {
-
-    } break;
-    case Bishop: {
-
-    } break;
-    case Rook: {
-
-    } break;
-    case Queen: {
-
-    } break;
-    case King: {
-
-    } break;
-    default:
-        std::unreachable();
-    }
-    std::unreachable();*/
-
 class GameState {
     //Piece* board[64];
 public:
@@ -672,9 +532,9 @@ public:
 
 
 
-    constexpr std::array<i8, 128> piecesCount() const
+    constexpr std::array<char, 128> piecesCountA() const
     {
-        std::array<i8, 128> res { 0 };
+        std::array<char, 128> res { 0 };
         for (const auto& i : board)
         {
             if (i != Piece::Nothing)
@@ -683,7 +543,7 @@ public:
         return res;
     }
 
-    constexpr float priceInLocation(i8 column, i8 row, PlayerSide playerColor) const
+    float priceInLocation(i8 column, i8 row, PlayerSide playerColor) const
     {
         if (column < 0 || column > 7 || row < 0 || row > 7)
             return -std::numeric_limits<float>::infinity();
@@ -822,7 +682,7 @@ public:
         return moveNotation(res.data());
     }
     
-    constexpr float balance() const {
+    float balance() const {
         double res = 0;
         for (i8 i = 0; i < 64; ++i) {
             if (board[i] == Piece::Nothing) [[likely]]//Just optimization
@@ -935,8 +795,8 @@ struct Variation {
     bool canTakeKing(PlayerSide onMove)
     {
         float alpha, beta;
-        alpha = -pricePiece(PieceGeneric::King);
-        beta = pricePiece(PieceGeneric::King);
+        alpha = -kingPrice;
+        beta = kingPrice;
 
         TempSwap playerBackup(board.playerOnMove, onMove);
         //TempSwap vectorBackup(saveToVector, false);
@@ -954,7 +814,7 @@ struct Variation {
             {
                 auto foundVal = thisHack->bestMoveWithThisPieceScore((i % 8), (i / 8), 0, alpha, beta, 0);
 
-                if (foundVal * onMove == pricePiece(PieceGeneric::King)) [[unlikely]]//Je možné vzít krále, hra skončila
+                if (foundVal * onMove == kingPrice) [[unlikely]]//Je možné vzít krále, hra skončila
                     {
                         return true;
                     }
@@ -1013,8 +873,8 @@ struct Variation {
     bool canMove(PlayerSide onMove)
     {
         float alpha, beta;
-        alpha = -pricePiece(PieceGeneric::King);
-        beta = pricePiece(PieceGeneric::King);
+        alpha = -kingPrice;
+        beta = kingPrice;
 
         for (i8 i = 0; i < board.board.size(); ++i) {
             Piece found = board.board[i];
@@ -1039,7 +899,7 @@ struct Variation {
         //bool backup = saveToVector;
         //saveToVector = false;
         //Both kings must be on the researchedBoard exactly once
-        auto count = board.piecesCount();
+        auto count = board.piecesCountA();
         if (count['k'] != 1 || count['K'] != 1)
             return false;
 
@@ -1170,7 +1030,7 @@ struct Variation {
                 {
                     bestValue = foundVal;
                 }
-                if (foundVal * board.playerOnMove == pricePiece(PieceGeneric::King))//Je možné vzít krále, hra skončila
+                if (foundVal * board.playerOnMove == kingPrice)//Je možné vzít krále, hra skončila
                 {
                     //wcout << endl;
                     //print();
@@ -1198,7 +1058,7 @@ struct Variation {
                     if (foundVal * board.playerOnMove > bestValue * board.playerOnMove) {
                         bestValue = foundVal;
                     }
-                    if (foundVal * board.playerOnMove == pricePiece(PieceGeneric::King))//Je možné vzít krále, hra skončila
+                    if (foundVal * board.playerOnMove == kingPrice)//Je možné vzít krále, hra skončila
                     {
                         //wcout << endl;
                         //print();
@@ -1283,10 +1143,10 @@ struct Variation {
         //if (doNotContinue) [[unlikely]]
         //    return;
 
-        if (priceTaken >= pricePiece(PieceGeneric::King) - 128) [[unlikely]]//Possible to take king (probaly check?)
+        if (priceTaken >= kingPrice - 128) [[unlikely]]//Possible to take king (probaly check?)
         {
             //doNotContinue = true;
-            bestValue = pricePiece(PieceGeneric::King) * board.playerOnMove;
+            bestValue = kingPrice * board.playerOnMove;
             //totalMoves++;
             //return;
         }
@@ -1305,7 +1165,7 @@ struct Variation {
             {
                 foundVal = tryPiece(column, row, p, depth, alpha, beta, valueSoFar);
 
-                if ((foundVal * board.playerOnMove * (-1)) == pricePiece(PieceGeneric::King))//V dalším tahu bych přišel o krále, není to legitimní tah
+                if ((foundVal * board.playerOnMove * (-1)) == kingPrice)//V dalším tahu bych přišel o krále, není to legitimní tah
                     return;
             }
             else//leaf node of the search tree
@@ -1714,21 +1574,21 @@ auto evaluateGameMove(Variation<> localBoard)//, double alpha = -std::numeric_li
 
         if (!firstLevelPruning)//If we want to know multiple good moves, we cannot prune using a/B at root level
         {
-            localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -pricePiece(PieceGeneric::King), pricePiece(PieceGeneric::King));
+            localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -kingPrice, kingPrice);
         }
         else
         {
             float localAlphaBeta = alphaOrBeta;
-            if (abs(localAlphaBeta) != pricePiece(PieceGeneric::King))
+            if (abs(localAlphaBeta) != kingPrice)
                 localBoard.pruned = true;
 
             switch (localBoard.board.playerOnMove)
             {
             case PlayerSide::BLACK: {
-                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, localAlphaBeta, pricePiece(PieceGeneric::King));
+                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, localAlphaBeta, kingPrice);
             } break;
             case PlayerSide::WHITE: {
-                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -pricePiece(PieceGeneric::King), localAlphaBeta);
+                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -kingPrice, localAlphaBeta);
             } break;
             default:
                 std::unreachable();
@@ -1920,7 +1780,7 @@ static auto rng = std::default_random_engine{ rd() };
 
 stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerSide bestForWhichSide, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)//, i8 depth = 1
 {
-    alphaOrBeta = pricePiece(PieceGeneric::King) * board.playerOnMove;
+    alphaOrBeta = kingPrice * board.playerOnMove;
     const i8 depth = 1;
     criticalTimeDepleted = false;
     onMoveW = board.playerOnMove;
@@ -2053,7 +1913,7 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
     auto timeThisStarted = std::chrono::high_resolution_clock::now();
     if (depth > 0)
     {
-        alphaOrBeta = pricePiece(PieceGeneric::King) * onMoveResearched;
+        alphaOrBeta = kingPrice * onMoveResearched;
         //lastReportedLowerBound = alphaOrBeta;
         //transpositions.clear();
 
@@ -2572,11 +2432,231 @@ duration_t predictTime(const duration_t& olderTime, const duration_t& newerTime,
     return projectedNextTime;
 }
 
+constexpr u8 calculatePhaseU8(const GameState& game)
+{
+    constexpr i8 PawnPhase = 0;
+    constexpr i8 KnightPhase = 1;
+    constexpr i8 BishopPhase = 1;
+    constexpr i8 RookPhase = 2;
+    constexpr i8 QueenPhase = 4;
+    constexpr i8 TotalPhase = PawnPhase * 16 + KnightPhase * 4 + BishopPhase * 4 + RookPhase * 4 + QueenPhase * 2;
+
+    const auto counts = game.piecesCountA();
+
+    i8 phase = TotalPhase;
+
+    phase -= counts[symbolA(Piece::PawnWhite)] * PawnPhase;
+    phase -= counts[symbolA(Piece::KnightWhite)] * KnightPhase;
+    phase -= counts[symbolA(Piece::BishopWhite)] * BishopPhase;
+    phase -= counts[symbolA(Piece::RookWhite)] * RookPhase;
+    phase -= counts[symbolA(Piece::QueenWhite)] * QueenPhase;
+
+    phase -= counts[symbolA(Piece::PawnBlack)] * PawnPhase;
+    phase -= counts[symbolA(Piece::KnightBlack)] * KnightPhase;
+    phase -= counts[symbolA(Piece::BishopBlack)] * BishopPhase;
+    phase -= counts[symbolA(Piece::RookBlack)] * RookPhase;
+    phase -= counts[symbolA(Piece::QueenBlack)] * QueenPhase;
+
+    phase = (phase * 255 + (TotalPhase / 2)) / TotalPhase;
+
+    return phase;
+}
+
+constexpr float calculatePhase(const GameState& game)
+{
+    return calculatePhaseU8(game) / 256.0f;
+}
+
+constexpr auto pesto_mg(PieceGeneric p)
+{
+    constexpr std::array<std::array<float, 64>, 7> prices =
+    {{
+        {//case PieceGeneric::Nothing:
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+        },
+        {//case PieceGeneric::Pawn:
+0,   0,   0,   0,   0,   0,  0,   0,
+98, 134,  61,  95,  68, 126, 34, -11,
+-6,   7,  26,  31,  65,  56, 25, -20,
+-14,  13,   6,  21,  23,  12, 17, -23,
+-27,  -2,  -5,  12,  17,   6, 10, -25,
+-26,  -4,  -4, -10,   3,   3, 33, -12,
+-35,  -1, -20, -23, -15,  24, 38, -22,
+  0,   0,   0,   0,   0,   0,  0,   0,
+        },
+        {//case PieceGeneric::Knight:
+-167, -89, -34, -49,  61, -97, -15, -107,
+ -73, -41,  72,  36,  23,  62,   7,  -17,
+ -47,  60,  37,  65,  84, 129,  73,   44,
+  -9,  17,  19,  53,  37,  69,  18,   22,
+ -13,   4,  16,  13,  28,  19,  21,   -8,
+ -23,  -9,  12,  10,  19,  17,  25,  -16,
+ -29, -53, -12,  -3,  -1,  18, -14,  -19,
+-105, -21, -58, -33, -17, -28, -19,  -23,
+        },
+        {//case PieceGeneric::Bishop:
+-29,   4, -82, -37, -25, -42,   7,  -8,
+-26,  16, -18, -13,  30,  59,  18, -47,
+-16,  37,  43,  40,  35,  50,  37,  -2,
+ -4,   5,  19,  50,  37,  37,   7,  -2,
+ -6,  13,  13,  26,  34,  12,  10,   4,
+  0,  15,  15,  15,  14,  27,  18,  10,
+  4,  15,  16,   0,   7,  21,  33,   1,
+-33,  -3, -14, -21, -13, -12, -39, -21,
+        },
+        {//case PieceGeneric::Rook:
+32,  42,  32,  51, 63,  9,  31,  43,
+27,  32,  58,  62, 80, 67,  26,  44,
+-5,  19,  26,  36, 17, 45,  61,  16,
+-24, -11,   7,  26, 24, 35,  -8, -20,
+-36, -26, -12,  -1,  9, -7,   6, -23,
+-45, -25, -16, -17,  3,  0,  -5, -33,
+-44, -16, -20,  -9, -1, 11,  -6, -71,
+-19, -13,   1,  17, 16,  7, -37, -26,
+        },
+        {//case PieceGeneric::Queen:
+-28,   0,  29,  12,  59,  44,  43,  45,
+-24, -39,  -5,   1, -16,  57,  28,  54,
+-13, -17,   7,   8,  29,  56,  47,  57,
+-27, -27, -16, -16,  -1,  17,  -2,   1,
+ -9, -26,  -9, -10,  -2,  -4,   3,  -3,
+-14,   2, -11,  -2,  -5,   2,  14,   5,
+-35,  -8,  11,   2,   8,  15,  -3,   1,
+ -1, -18,  -9,  10, -15, -25, -31, -50,
+        },
+        {//case PieceGeneric::King:
+-65,  23,  16, -15, -56, -34,   2,  13,
+ 29,  -1, -20,  -7,  -8,  -4, -38, -29,
+ -9,  24,   2, -16, -20,   6,  22, -22,
+-17, -20, -12, -27, -30, -25, -14, -36,
+-49,  -1, -27, -39, -46, -44, -33, -51,
+-14, -14, -22, -46, -44, -30, -15, -27,
+  1,   7,  -8, -64, -43, -16,   9,   8,
+-15,  36,  12, -54,   8, -28,  24,  14,
+        }
+    }};
+
+    return prices[(i8)p];
+}
+constexpr auto pesto_eg(PieceGeneric p)
+{
+    constexpr std::array<std::array<float, 64>, 7> prices =
+    { {
+        {//case PieceGeneric::Nothing:
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+0,   0,   0,   0,   0,   0,  0,   0,
+        },
+        {//case PieceGeneric::Pawn:
+      0,   0,   0,   0,   0,   0,   0,   0,
+    178, 173, 158, 134, 147, 132, 165, 187,
+     94, 100,  85,  67,  56,  53,  82,  84,
+     32,  24,  13,   5,  -2,   4,  17,  17,
+     13,   9,  -3,  -7,  -7,  -8,   3,  -1,
+      4,   7,  -6,   1,   0,  -5,  -1,  -8,
+     13,   8,   8,  10,  13,   0,   2,  -7,
+      0,   0,   0,   0,   0,   0,   0,   0,
+        },
+        {//case PieceGeneric::Knight:
+    -58, -38, -13, -28, -31, -27, -63, -99,
+    -25,  -8, -25,  -2,  -9, -25, -24, -52,
+    -24, -20,  10,   9,  -1,  -9, -19, -41,
+    -17,   3,  22,  22,  22,  11,   8, -18,
+    -18,  -6,  16,  25,  16,  17,   4, -18,
+    -23,  -3,  -1,  15,  10,  -3, -20, -22,
+    -42, -20, -10,  -5,  -2, -20, -23, -44,
+    -29, -51, -23, -15, -22, -18, -50, -64,
+        },
+        {//case PieceGeneric::Bishop:
+    -14, -21, -11,  -8, -7,  -9, -17, -24,
+     -8,  -4,   7, -12, -3, -13,  -4, -14,
+      2,  -8,   0,  -1, -2,   6,   0,   4,
+     -3,   9,  12,   9, 14,  10,   3,   2,
+     -6,   3,  13,  19,  7,  10,  -3,  -9,
+    -12,  -3,   8,  10, 13,   3,  -7, -15,
+    -14, -18,  -7,  -1,  4,  -9, -15, -27,
+    -23,  -9, -23,  -5, -9, -16,  -5, -17,
+        },
+        {//case PieceGeneric::Rook:
+    13, 10, 18, 15, 12,  12,   8,   5,
+    11, 13, 13, 11, -3,   3,   8,   3,
+     7,  7,  7,  5,  4,  -3,  -5,  -3,
+     4,  3, 13,  1,  2,   1,  -1,   2,
+     3,  5,  8,  4, -5,  -6,  -8, -11,
+    -4,  0, -5, -1, -7, -12,  -8, -16,
+    -6, -6,  0,  2, -9,  -9, -11,  -3,
+    -9,  2,  3, -1, -5, -13,   4, -20,
+        },
+        {//case PieceGeneric::Queen:
+     -9,  22,  22,  27,  27,  19,  10,  20,
+    -17,  20,  32,  41,  58,  25,  30,   0,
+    -20,   6,   9,  49,  47,  35,  19,   9,
+      3,  22,  24,  45,  57,  40,  57,  36,
+    -18,  28,  19,  47,  31,  34,  39,  23,
+    -16, -27,  15,   6,   9,  17,  10,   5,
+    -22, -23, -30, -16, -16, -23, -36, -32,
+    -33, -28, -22, -43,  -5, -32, -20, -41,
+        },
+        {//case PieceGeneric::King:
+    -74, -35, -18, -18, -11,  15,   4, -17,
+    -12,  17,  14,  17,  17,  38,  23,  11,
+     10,  17,  23,  15,  20,  45,  44,  13,
+     -8,  22,  24,  27,  26,  33,  26,   3,
+    -18,  -4,  21,  24,  27,  23,   9, -11,
+    -19,  -3,  11,  21,  23,  16,   7,  -9,
+    -27, -11,   4,  13,  14,   4,  -5, -17,
+    -53, -34, -21, -11, -28, -14, -24, -43
+        }
+    } };
+
+    return prices[(i8)p];
+}
+
+std::array<std::array<std::array<float, 64>, 7>, 256> pesto;
+std::array<std::array<float, 7>, 256> pieceValues;
+
+void pesto_calculate()
+{
+    for (size_t i = 0; i < 256; i++)//Phases
+    {
+        for (size_t j = 0; j < 7; j++)//Pieces
+        {
+            auto mg = pesto_mg((PieceGeneric)j);
+            auto eg = pesto_eg((PieceGeneric)j);
+            for (size_t k = 0; k < 64; k++)//Board
+            {
+                pesto[i][j][k] = ((mg[k] * (255 - i)) + (eg[k] * i)) / 255;
+            }
+
+            constexpr float mg_value[7] = { 0, 82, 337, 365, 477, 1025,  kingPrice };
+            constexpr float eg_value[7] = { 0, 94, 281, 297, 512,  936,  kingPrice };
+
+            pieceValues[i][j] = ((mg_value[j] * (255 - i)) + (eg_value[j] * i)) / 255;
+        }
+    }
+}
+
+
 void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<duration_t, 2> playerInc, duration_t timeTarget, size_t maxDepth, const stack_vector<std::array<Piece, 64>, 75>& playedPositions)
 {
     std::unique_lock l(uciGoM);
     timeGlobalStarted = std::chrono::high_resolution_clock::now();
     //uciGoM.lock();
+    auto phaseU8 = calculatePhaseU8(board);
+    pestoPhase = &pesto[phaseU8];
+    piecePhase = &pieceValues[phaseU8];
 
     duration_t timeTargetMax(timeTarget);
     duration_t timeTargetOptimal(timeTarget);
@@ -2918,6 +2998,9 @@ void uciGo(GameState& board, std::array<duration_t, 2> playerTime, std::array<du
 
 int uci(std::istream& in, std::ostream& output)
 {
+    pesto_calculate();
+    pestoPhase = &pesto[0]; // Just to set it to something
+    piecePhase = &pieceValues[0];
     outStream = &output;
     //while (true)
     //{
