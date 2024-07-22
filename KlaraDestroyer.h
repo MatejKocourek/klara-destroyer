@@ -1569,37 +1569,47 @@ auto evaluateGameMove(Variation<> localBoard)//, double alpha = -std::numeric_li
 {
     if (localBoard.variationDepth > 0) [[likely]] //Not predetermined result - e.g. not a draw by repetition
     {
-        auto timeStart = std::chrono::high_resolution_clock::now();
-        //Variation localBoard(board);
-
-        if (!firstLevelPruning)//If we want to know multiple good moves, we cannot prune using a/B at root level
+        if (round(abs(localBoard.bestFoundValue) / matePrice) > 0) [[unlikely]]
         {
-            localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -kingPrice, kingPrice);
+            debugOut << "Encountered board with mate possibility." << std::endl;
+            localBoard.bestFoundValue += (matePrice * (localBoard.bestFoundValue>0?1:-1))*2;
+            localBoard.time = duration_t(0); //Known mate
         }
         else
         {
-            float localAlphaBeta = alphaOrBeta;
-            if (abs(localAlphaBeta) != kingPrice)
-                localBoard.pruned = true;
+            auto timeStart = std::chrono::high_resolution_clock::now();
+            //Variation localBoard(board);
 
-            switch (localBoard.board.playerOnMove)
+            if (!firstLevelPruning)//If we want to know multiple good moves, we cannot prune using a/B at root level
             {
-            case PlayerSide::BLACK: {
-                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, localAlphaBeta, kingPrice);
-            } break;
-            case PlayerSide::WHITE: {
-                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -kingPrice, localAlphaBeta);
-            } break;
-            default:
-                std::unreachable();
+                localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -kingPrice, kingPrice);
             }
-        }
+            else
+            {
+                float localAlphaBeta = alphaOrBeta;
+                if (abs(localAlphaBeta) != kingPrice)
+                    localBoard.pruned = true;
 
-        //board.nodes = localBoard.nodes;
-        localBoard.time = std::chrono::high_resolution_clock::now() - timeStart;
+                switch (localBoard.board.playerOnMove)
+                {
+                case PlayerSide::BLACK: {
+                    localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, localAlphaBeta, kingPrice);
+                } break;
+                case PlayerSide::WHITE: {
+                    localBoard.bestFoundValue = localBoard.bestMoveScore(localBoard.variationDepth, localBoard.startingValue, -kingPrice, localAlphaBeta);
+                } break;
+                default:
+                    std::unreachable();
+                }
+            }
+
+            //board.nodes = localBoard.nodes;
+            localBoard.time = std::chrono::high_resolution_clock::now() - timeStart;
+        }
     }
     else
         localBoard.time = duration_t(0); //Known draw by repetition
+
     switch (localBoard.board.playerOnMove)
     {
     case PlayerSide::BLACK: {
@@ -1632,7 +1642,6 @@ void workerFromQ(size_t threadId)//, double alpha = -std::numeric_limits<float>:
             --qPos;
             break;
         }
-
 
         auto& board = (*q)[localPos];
         AssertAssume(board.board.playerOnMove == onMoveW);
