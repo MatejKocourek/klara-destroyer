@@ -67,7 +67,7 @@ public:
 	{
 		return _size;
 	}
-	constexpr size_t reserve(size_t newCapacity)
+	constexpr void reserve(size_t newCapacity)
 	{
 		if (newCapacity > max_size()) [[unlikely]]
 			throw std::length_error("Cannot reserve this size on a static sized string");
@@ -99,7 +99,7 @@ public:
 	constexpr void push_back(char c)
 	{
 		assert(size() < max_size());
-		_data[size++] = c;
+		_data[_size++] = c;
 	}
 	constexpr void pop_back()
 	{
@@ -148,26 +148,29 @@ public:
 	constexpr bool contains(const char* c_str) const {
 		return std::string_view(*this).contains(c_str);
 	}
-
-	static friend std::ostream& operator<<(std::ostream& os, const stack_string& x) {
-		return os << std::string_view(x);
-	}
-	template <size_t N>
-	static friend bool operator==(const stack_string& lhs, const stack_string<N>& rhs) noexcept {
-		return std::string_view(lhs) == std::string_view(rhs);
-	}
-	static friend bool operator==(const stack_string& lhs, const std::string_view& rhs) noexcept {
-		return std::string_view(lhs) == rhs;
-	}
-	static friend bool operator==(const std::string_view& lhs, const stack_string& rhs) noexcept {
-		return lhs == std::string_view(rhs);
-	}
-	static friend bool operator==(const stack_string& lhs, const std::string& rhs) noexcept {
-		return std::string_view(lhs) == rhs;
-	}
-	static friend bool operator==(const std::string& lhs, const stack_string& rhs) noexcept {
-		return lhs == std::string_view(rhs);
-	}
-
-
 };
+
+template <size_t _capacity>
+std::ostream& operator<<(std::ostream& os, const stack_string<_capacity>& x) {
+	return os << std::string_view(x);
+}
+template <size_t _capacity, size_t N>
+constexpr bool operator==(const stack_string<_capacity>& lhs, const stack_string<N>& rhs) noexcept {
+	return std::string_view(lhs) == std::string_view(rhs);
+}
+template <size_t _capacity>
+constexpr bool operator==(const stack_string<_capacity>& lhs, const std::string_view& rhs) noexcept {
+	return std::string_view(lhs) == rhs;
+}
+template <size_t _capacity>
+constexpr bool operator==(const std::string_view& lhs, const stack_string<_capacity>& rhs) noexcept {
+	return lhs == std::string_view(rhs);
+}
+template <size_t _capacity>
+constexpr bool operator==(const stack_string<_capacity>& lhs, const std::string& rhs) noexcept {
+	return std::string_view(lhs) == rhs;
+}
+template <size_t _capacity>
+constexpr bool operator==(const std::string& lhs, const stack_string<_capacity>& rhs) noexcept {
+	return lhs == std::string_view(rhs);
+}

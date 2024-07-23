@@ -307,8 +307,8 @@ public:
 		const T* operator->() { return m_ptr; }
 		ConstantIterator& operator++() { ++m_ptr; return *this; }
 		ConstantIterator operator++(int) { ConstantIterator tmp = *this; ++(*this); return tmp; }
-		friend bool operator== (const ConstantIterator& a, const ConstantIterator& b) { return a.m_ptr == b.m_ptr; };
-		friend bool operator!= (const ConstantIterator& a, const ConstantIterator& b) { return a.m_ptr != b.m_ptr; };
+		friend bool operator== (const ConstantIterator& a, const ConstantIterator& b) { return a.m_ptr == b.m_ptr; }
+		friend bool operator!= (const ConstantIterator& a, const ConstantIterator& b) { return a.m_ptr != b.m_ptr; }
 
 	private:
 		const T* m_ptr;

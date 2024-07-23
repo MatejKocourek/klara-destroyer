@@ -39,7 +39,13 @@ std::ostream* outStream;
 #ifdef _DEBUG
 #define AssertAssume(...)  assert(__VA_ARGS__)
 #else
+#if defined(_MSC_VER) && !defined(__clang__)
 #define AssertAssume(...)  __assume(__VA_ARGS__)
+#elif defined(__clang__)
+#define AssertAssume(...)  __builtin_assume(__VA_ARGS__)
+#else
+#define AssertAssume(...)  [[assume(__VA_ARGS__)]]
+#endif
 #endif
 
 
@@ -216,9 +222,10 @@ struct Options {
     size_t Threads;
     size_t Verbosity;
     bool UCI_Chess960;
-} options;
+};
 
-bool firstLevelPruning = true;
+static Options options;
+static bool firstLevelPruning = true;
 
 
 constexpr i8 oneColumn = 1;
