@@ -977,7 +977,7 @@ struct Variation {
                 if (found == Piece::Nothing)
                     continue;
                 if (pieceColor(found) == board.playerOnMove)
-                    possiblePiecesToMove.emplace_back(bestMoveWithThisPieceScore(i % 8, i / 8, -1, alphaTmp, betaTmp, valueSoFar), i);
+                    possiblePiecesToMove.unchecked_emplace_back(bestMoveWithThisPieceScore(i % 8, i / 8, -1, alphaTmp, betaTmp, valueSoFar), i);
             }
 
             switch (board.playerOnMove)
@@ -1227,7 +1227,7 @@ struct Variation {
         bool fieldWasFree = tryPlacingPieceAt(p, column, row, 0, alpha, beta, bestValue, 0);
 
         if (bestValue != -std::numeric_limits<float>::infinity() * board.playerOnMove)
-            possibleMoves.emplace_back(bestValue, std::make_pair(column, row));
+            possibleMoves.unchecked_emplace_back(bestValue, std::make_pair(column, row));
 
         return fieldWasFree;
     }
@@ -1756,7 +1756,7 @@ bool cutoffBadMoves(stack_vector<Variation<>,maxMoves>& boards, float cutoffPoin
     for (size_t i = 1; i < boards.size(); ++i)
     {
         if ((-boards[i].bestFoundValue * boards[0].firstMoveOnMove) >= cutoffPoint)
-            newBoards.push_back(std::move(boards[i]));
+            newBoards.unchecked_push_back(std::move(boards[i]));
         else
             ++cutoffCounter;
     }
@@ -1825,11 +1825,11 @@ stack_vector<Variation<>,maxMoves> generateMoves(const GameState& board, PlayerS
     {
         if (std::find(playedPositions.begin(), playedPositions.end(), pos.first.board) != playedPositions.end()) [[unlikely]]
         {
-            res.emplace_back(pos.first, 0, 0, 0, pos.first.playerOnMove, pos.first.findDiff(board));
+            res.unchecked_emplace_back(pos.first, 0, 0, 0, pos.first.playerOnMove, pos.first.findDiff(board));
             debugOut << "Deja vu! Found a possible move that results in an already played position: " << res.back().firstMoveNotation <<". Assigning a value of a draw." << std::endl;
         }
         else [[likely]]
-            res.emplace_back(pos.first, pos.second, pos.second, depth, pos.first.playerOnMove, pos.first.findDiff(board));
+            res.unchecked_emplace_back(pos.first, pos.second, pos.second, depth, pos.first.playerOnMove, pos.first.findDiff(board));
         //pos.startingValue *= bestForWhichSide;//To our POV
         //pos.bestFoundValue *= bestForWhichSide;//To our POV
         //pos.firstMoveNotation = pos.board.findDiff(board);
@@ -1971,14 +1971,14 @@ duration_t findBestOnSameLevel(stack_vector<Variation<>, maxMoves>& boards, i8 d
         //Add the best result
         if (bestMove != nullptr)
         {
-            resultBoards.push_back(*bestMove);
+            resultBoards.unchecked_push_back(*bestMove);
         }
 
         //Add the rest of the boards that finished computation without changing the order
         for (auto&& i : boards)
         {
             if (&i != bestMove && i.time != static_cast<duration_t>(std::numeric_limits<double>::infinity()))
-                resultBoards.push_back(std::move(i));
+                resultBoards.unchecked_push_back(std::move(i));
             //else
               //  debugOut << "board " << i.firstMoveNotation << " has value of infinity" << std::endl;
         }

@@ -175,7 +175,6 @@ public:
 	}
 
 	size_t size() const noexcept {
-		[[assume(_size <= N)]];
 		return _size;
 	}
 
@@ -207,11 +206,24 @@ public:
 		emplace_back(std::move(element));
 	}
 
+	void unchecked_push_back(const T& element) {
+		unchecked_emplace_back(element);
+	}
+	void unchecked_push_back(T&& element) {
+		unchecked_emplace_back(std::move(element));
+	}
+
 	template <typename... Ts>
 	void emplace_back(Ts&&... param) {
+		if (size() >= capacity()) [[unlikely]]
+			throw std::bad_alloc(/*"Vector size not enough to fit element"*/);
+		new (&data()[_size]) T(std::forward<Ts>(param)...);
+		++_size;
+	}
 
-		//if constexpr (_DEBUG)
-		reserve(size() + 1);
+	template <typename... Ts>
+	void unchecked_emplace_back(Ts&&... param) {
+		assert(size() < capacity());
 
 		new (&data()[_size]) T(std::forward<Ts>(param)...);
 		++_size;
